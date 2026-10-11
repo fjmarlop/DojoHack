@@ -35,11 +35,14 @@ from pathlib import Path
 DEFAULT_WORDLIST = "/usr/share/seclists/Discovery/Web-Content/raft-medium-directories.txt"
 
 
-def run(target: str, wordlist: str = DEFAULT_WORDLIST) -> list[dict]:
-    """Devuelve una lista de hallazgos, uno por ruta encontrada, con
-    el mismo convenio que el resto de módulos: {"name", "detail",
-    "severity"}. El timeout lo controla dojohack.timeouts.run_module,
-    no esta función."""
+def fuzz(target: str, wordlist: str = DEFAULT_WORDLIST) -> list[dict]:
+    """Ejecuta ffuf contra target y devuelve la lista de resultados
+    crudos (uno por ruta que pasó el filtro -fc 404), tal cual los da
+    su salida -of json. Separado de parse_findings()/parse_urls() por
+    el mismo motivo que crawl() en katana_scan.py: la tabla de pistas
+    por patrón de ruta (dojohack.route_patterns) reutiliza estas
+    mismas rutas sin tener que relanzar el fuzzing. El timeout lo
+    controla dojohack.timeouts.run_module, no esta función."""
     if not Path(wordlist).is_file():
         raise RuntimeError(f"wordlist no encontrada: {wordlist}")
 
@@ -65,12 +68,32 @@ def run(target: str, wordlist: str = DEFAULT_WORDLIST) -> list[dict]:
     finally:
         Path(out_path).unlink(missing_ok=True)
 
+    return data.get("results", [])
+
+
+def parse_findings(results: list[dict]) -> list[dict]:
+    """Convierte los resultados crudos de fuzz() en hallazgos, con el
+    mismo convenio que el resto de módulos: {"name", "detail",
+    "severity"}."""
     findings = []
-    for r in data.get("results", []):
+    for r in results:
         status = r.get("status")
         length = r.get("length")
         path = r.get("url", "")
         detalle = f"{status} {path} ({length} bytes)"
         findings.append({"name": "FFUF", "detail": detalle, "severity": "info"})
-
     return findings
+
+
+def parse_urls(results: list[dict]) -> list[str]:
+    """Convierte los resultados crudos de fuzz() en la lista de URLs
+    encontradas (sin formatear como hallazgo)."""
+    return [r["url"] for r in results if r.get("url")]
+
+
+def run(target: str, wordlist: str = DEFAULT_WORDLIST) -> list[dict]:
+    """Atajo para uso aislado del módulo (pruebas manuales, etc.):
+    fuzz() + parse_findings() en un solo paso. cli.py no usa esta
+    función directamente porque necesita reutilizar los resultados
+    crudos para route_patterns — ver parse_urls()."""
+    return parse_findings(fuzz(target, wordlist))

@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import preflight, preprocessor
+from . import preflight, preprocessor, route_patterns
 from .modules import dalfox_scan, ffuf_scan, katana_scan, nmap_scan, nuclei_scan, trufflehog_scan
 from .probes import common as probe_common
 from .probes import path_traversal, ssrf, ssti
@@ -73,15 +73,18 @@ def main() -> int:
         else:
             log("nuclei: sin resultado (fallo, timeout o nada que reportar)")
 
+    ffuf_urls: list = []
     if "ffuf" in missing_tools:
         log("ffuf: omitido (binario no encontrado)")
     else:
         log("ffuf: en marcha...")
-        result = run_module(
-            ffuf_scan.run, target,
+        ffuf_results = run_module(
+            ffuf_scan.fuzz, target,
             timeout=MODULE_TIMEOUTS["ffuf"], label="ffuf", on_error=log,
         )
-        if result:
+        if ffuf_results:
+            result = ffuf_scan.parse_findings(ffuf_results)
+            ffuf_urls = ffuf_scan.parse_urls(ffuf_results)
             findings.extend(result)
             log(f"ffuf: hecho — {len(result)} rutas encontradas")
         else:
@@ -105,6 +108,12 @@ def main() -> int:
             log(f"katana: hecho — {len(result)} endpoints encontrados")
         else:
             log("katana: sin resultado (fallo, timeout o nada que reportar)")
+
+    rutas_descubiertas = ffuf_urls + katana_urls
+    result = route_patterns.scan_paths(rutas_descubiertas)
+    if result:
+        findings.extend(result)
+    log(f"patrones de ruta: {len(result)} rutas sospechosas de {len(rutas_descubiertas)} analizadas")
 
     if "dalfox" in missing_tools:
         log("dalfox: omitido (binario no encontrado)")
