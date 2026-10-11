@@ -18,7 +18,7 @@ from pathlib import Path
 from . import preflight
 from .modules import dalfox_scan, ffuf_scan, katana_scan, nmap_scan, nuclei_scan, trufflehog_scan
 from .probes import common as probe_common
-from .probes import ssti
+from .probes import ssrf, ssti
 from .timeouts import MODULE_TIMEOUTS, run_module
 
 
@@ -135,6 +135,7 @@ def main() -> int:
             log("trufflehog: sin resultado (fallo, timeout, no expone .git, o nada que reportar)")
 
     injection_points = probe_common.from_urls(katana_urls) + probe_common.from_forms(katana_forms)
+
     log(f"ssti: en marcha... ({len(injection_points)} puntos de inyección)")
     result = run_module(
         ssti.run, injection_points,
@@ -145,6 +146,17 @@ def main() -> int:
         log(f"ssti: hecho — {len(result)} hallazgos")
     else:
         log("ssti: sin resultado (fallo, timeout, sin puntos de inyección, o nada que reportar)")
+
+    log(f"ssrf: en marcha... ({len(injection_points)} puntos de inyección)")
+    result = run_module(
+        ssrf.run, injection_points, target,
+        timeout=MODULE_TIMEOUTS["ssrf"], label="ssrf", on_error=log,
+    )
+    if result:
+        findings.extend(result)
+        log(f"ssrf: hecho — {len(result)} hallazgos")
+    else:
+        log("ssrf: sin resultado (fallo, timeout, sin puntos de inyección, o nada que reportar)")
 
     out_path = out_dir / "findings.json"
     with open(out_path, "w", encoding="utf-8") as f:
