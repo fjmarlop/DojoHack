@@ -20,7 +20,9 @@ punta antes de sumar el resto de módulos:
 - [x] Esqueleto del proyecto + CLI
 - [x] Wrapper de timeout por módulo (`run_module`/`MODULE_TIMEOUTS`)
 - [x] Módulo nmap (binario externo, sin lógica propia que reescribir)
-- [ ] nuclei / ffuf (dir + vhost) / katana / dalfox / trufflehog / wpscan
+- [ ] Módulo nuclei — escrito, pendiente de validar contra un target
+      real (nmap/nuclei aún no instalados en esta máquina)
+- [ ] ffuf (dir + vhost) / katana / dalfox / trufflehog / wpscan
 - [ ] Sondas propias: SSTI, SSRF, XSS, Path Traversal, etc.
 - [ ] Preprocessor (agrupación + confianza) — portado de PocketHacker
 - [ ] Clasificador de pistas (dos tablas: hallazgo con evidencia vs.
