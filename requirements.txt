@@ -1,3 +1,1 @@
-# Vacío por ahora — el primer corte (nmap) solo usa la stdlib.
-# Se irá llenando a medida que se sumen módulos (ej. httpx para las
-# sondas propias de inyección, cuando toque esa parte).
+httpx

@@ -12,6 +12,10 @@ Flags elegidos:
 - -jc (js-crawl): sigue y parsea JS en busca de más endpoints —
   coherente con "arsenal completo, sin recortar".
 - -kf all (known-files): también comprueba robots.txt y sitemap.xml.
+- -fx (form-extraction): extrae method/action/campos de los
+  formularios de cada página — lo necesitan las sondas propias
+  (SSTI y las que vengan después) para saber qué campos POST probar,
+  no solo los parámetros de query string de las URLs.
 - Profundidad por defecto de katana (3) — no se toca; crawl completo
   en un lab local no tarda lo suficiente como para justificar
   reducirla.
@@ -44,7 +48,7 @@ def crawl(target: str) -> str:
     proc = subprocess.run(
         [
             "katana", "-u", url,
-            "-jsonl", "-silent", "-jc", "-kf", "all",
+            "-jsonl", "-silent", "-jc", "-kf", "all", "-fx",
         ],
         capture_output=True, text=True,
     )
@@ -103,6 +107,32 @@ def parse_endpoints(raw_jsonl: str) -> list[str]:
             urls.append(endpoint)
 
     return urls
+
+
+def parse_forms(raw_jsonl: str) -> list[dict]:
+    """Convierte la salida cruda de crawl() en la lista de
+    formularios encontrados (method/action/parameters), sin
+    duplicados. Lo necesitan las sondas propias (dojohack.probes)
+    para construir puntos de inyección POST."""
+    forms = []
+    seen = set()
+    for line in raw_jsonl.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        for form in item.get("response", {}).get("forms", []):
+            key = (form.get("method"), form.get("action"), tuple(form.get("parameters", [])))
+            if key in seen:
+                continue
+            seen.add(key)
+            forms.append(form)
+
+    return forms
 
 
 def run(target: str) -> list[dict]:
