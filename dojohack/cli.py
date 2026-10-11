@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import preflight, preprocessor, route_patterns
+from . import classifier, preflight, preprocessor, route_patterns
 from .modules import dalfox_scan, ffuf_scan, katana_scan, nmap_scan, nuclei_scan, trufflehog_scan
 from .probes import common as probe_common
 from .probes import path_traversal, ssrf, ssti
@@ -191,6 +191,13 @@ def main() -> int:
         f"preprocesado: {len(preprocesado['grupos'])} grupos, "
         f"{len(preprocesado['ruido'])} descartados como ruido — guardado: {preprocessed_path}"
     )
+
+    pistas = classifier.classify(preprocesado)
+    contexto = classifier.extract_context(preprocesado)
+    pistas_path = out_dir / "pistas.json"
+    with open(pistas_path, "w", encoding="utf-8") as f:
+        json.dump({"pistas": pistas, "contexto": contexto}, f, indent=2, ensure_ascii=False)
+    log(f"pistas: {len(pistas)} — guardado: {pistas_path}")
 
     return 0
 
