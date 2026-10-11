@@ -55,8 +55,9 @@ def run(target: str, urls: list[str] | None = None) -> list[dict]:
         severity = item.get("severity", "info").lower()
         payload = item.get("payload", "")
         poc_url = item.get("data", "")
+        tipo = item.get("type", "?")  # V=Verified (ejecución confirmada), R=Reflected (sin confirmar), A=AST DOM, I=informativo
 
-        detalle = f"{method} param '{param}' — payload: {payload} — {poc_url}"
+        detalle = f"{method} param '{param}' (tipo {tipo}) — payload: {payload} — {poc_url}"
         findings.append({"name": "DALFOX", "detail": detalle, "severity": severity})
 
     return findings

@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import preflight
+from . import preflight, preprocessor
 from .modules import dalfox_scan, ffuf_scan, katana_scan, nmap_scan, nuclei_scan, trufflehog_scan
 from .probes import common as probe_common
 from .probes import path_traversal, ssrf, ssti
@@ -173,6 +173,15 @@ def main() -> int:
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump({"target": target, "findings": findings}, f, indent=2, ensure_ascii=False)
     log(f"guardado: {out_path}")
+
+    preprocesado = preprocessor.preprocess_findings(findings)
+    preprocessed_path = out_dir / "preprocessed.json"
+    with open(preprocessed_path, "w", encoding="utf-8") as f:
+        json.dump(preprocesado, f, indent=2, ensure_ascii=False)
+    log(
+        f"preprocesado: {len(preprocesado['grupos'])} grupos, "
+        f"{len(preprocesado['ruido'])} descartados como ruido — guardado: {preprocessed_path}"
+    )
 
     return 0
 
