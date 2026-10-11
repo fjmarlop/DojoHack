@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import classifier, preflight, preprocessor, route_patterns
+from . import classifier, preflight, preprocessor, report, route_patterns
 from .modules import dalfox_scan, ffuf_scan, katana_scan, nmap_scan, nuclei_scan, trufflehog_scan
 from .probes import common as probe_common
 from .probes import path_traversal, ssrf, ssti
@@ -198,6 +198,13 @@ def main() -> int:
     with open(pistas_path, "w", encoding="utf-8") as f:
         json.dump({"pistas": pistas, "contexto": contexto}, f, indent=2, ensure_ascii=False)
     log(f"pistas: {len(pistas)} — guardado: {pistas_path}")
+
+    informe_path = out_dir / "informe.md"
+    with open(informe_path, "w", encoding="utf-8") as f:
+        f.write(report.render_markdown(target, pistas, contexto))
+    log(f"informe: guardado: {informe_path}")
+
+    print(report.render_terminal(target, pistas, contexto))
 
     return 0
 
