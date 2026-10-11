@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 from . import preflight
-from .modules import ffuf_scan, katana_scan, nmap_scan, nuclei_scan
+from .modules import dalfox_scan, ffuf_scan, katana_scan, nmap_scan, nuclei_scan
 from .timeouts import MODULE_TIMEOUTS, run_module
 
 
@@ -85,19 +85,36 @@ def main() -> int:
         else:
             log("ffuf: sin resultado (fallo, timeout o nada que reportar)")
 
+    katana_urls: list = []
     if "katana" in missing_tools:
         log("katana: omitido (binario no encontrado)")
     else:
         log("katana: en marcha...")
-        result = run_module(
-            katana_scan.run, target,
+        raw = run_module(
+            katana_scan.crawl, target,
             timeout=MODULE_TIMEOUTS["katana"], label="katana", on_error=log,
         )
-        if result:
+        if raw:
+            result = katana_scan.parse_findings(raw)
+            katana_urls = katana_scan.parse_endpoints(raw)
             findings.extend(result)
             log(f"katana: hecho — {len(result)} endpoints encontrados")
         else:
             log("katana: sin resultado (fallo, timeout o nada que reportar)")
+
+    if "dalfox" in missing_tools:
+        log("dalfox: omitido (binario no encontrado)")
+    else:
+        log("dalfox: en marcha...")
+        result = run_module(
+            dalfox_scan.run, target, urls=katana_urls or None,
+            timeout=MODULE_TIMEOUTS["dalfox"], label="dalfox", on_error=log,
+        )
+        if result:
+            findings.extend(result)
+            log(f"dalfox: hecho — {len(result)} XSS encontrados")
+        else:
+            log("dalfox: sin resultado (fallo, timeout o nada que reportar)")
 
     out_path = out_dir / "findings.json"
     with open(out_path, "w", encoding="utf-8") as f:

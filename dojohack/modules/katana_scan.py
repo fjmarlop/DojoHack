@@ -23,17 +23,23 @@ Flags elegidos:
 Usa -jsonl (una línea JSON por request) en vez de la salida de
 consola — mismo motivo que nmap/nuclei: formato estable entre
 versiones.
+
+crawl()/parse_findings() están separados (en vez de un único run())
+porque dalfox necesita las mismas URLs que rastrea katana (dalfox no
+rastrea el sitio por su cuenta, solo analiza parámetros de las URLs
+que se le dan — decisión tomada con Paco). Separarlos permite que
+cli.py relance el crawl una sola vez y lo reutilice para ambos
+módulos, en vez de que dalfox repita el crawl por su cuenta.
 """
 
 import json
 import subprocess
 
 
-def run(target: str) -> list[dict]:
-    """Devuelve una lista de hallazgos, uno por endpoint descubierto,
-    con el mismo convenio que el resto de módulos: {"name", "detail",
-    "severity"}. El timeout lo controla dojohack.timeouts.run_module,
-    no esta función."""
+def crawl(target: str) -> str:
+    """Ejecuta katana contra target y devuelve la salida cruda en
+    jsonl (una línea JSON por request). El timeout lo controla
+    dojohack.timeouts.run_module, no esta función."""
     url = f"http://{target}"
     proc = subprocess.run(
         [
@@ -44,9 +50,15 @@ def run(target: str) -> list[dict]:
     )
     if proc.returncode != 0 and not proc.stdout.strip():
         raise RuntimeError(f"katana devolvió código {proc.returncode}: {proc.stderr[:300]}")
+    return proc.stdout
 
+
+def parse_findings(raw_jsonl: str) -> list[dict]:
+    """Convierte la salida cruda de crawl() en hallazgos, uno por
+    endpoint descubierto, con el mismo convenio que el resto de
+    módulos: {"name", "detail", "severity"}."""
     findings = []
-    for line in proc.stdout.splitlines():
+    for line in raw_jsonl.splitlines():
         line = line.strip()
         if not line:
             continue
@@ -68,3 +80,35 @@ def run(target: str) -> list[dict]:
         findings.append({"name": "KATANA", "detail": detalle, "severity": "info"})
 
     return findings
+
+
+def parse_endpoints(raw_jsonl: str) -> list[str]:
+    """Convierte la salida cruda de crawl() en una lista de URLs
+    únicas descubiertas (sin formatear como hallazgo) — lo que
+    necesita dalfox para elegir qué probar."""
+    urls = []
+    seen = set()
+    for line in raw_jsonl.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+
+        endpoint = item.get("request", {}).get("endpoint")
+        if endpoint and endpoint not in seen:
+            seen.add(endpoint)
+            urls.append(endpoint)
+
+    return urls
+
+
+def run(target: str) -> list[dict]:
+    """Atajo para uso aislado del módulo (pruebas manuales, etc.):
+    crawl() + parse_findings() en un solo paso, igual que el resto de
+    módulos del pipeline. cli.py no usa esta función directamente
+    porque necesita reutilizar el crawl crudo para dalfox — ver
+    parse_endpoints()."""
+    return parse_findings(crawl(target))
