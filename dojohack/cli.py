@@ -15,6 +15,7 @@ import json
 import sys
 from pathlib import Path
 
+from . import preflight
 from .modules import ffuf_scan, nmap_scan, nuclei_scan
 from .timeouts import MODULE_TIMEOUTS, run_module
 
@@ -40,38 +41,49 @@ def main() -> int:
 
     log(f"objetivo: {target}")
 
-    log("nmap: en marcha...")
-    result = run_module(
-        nmap_scan.run, target,
-        timeout=MODULE_TIMEOUTS["nmap"], label="nmap", on_error=log,
-    )
-    if result:
-        findings.extend(result)
-        log(f"nmap: hecho — {len(result)} puertos abiertos")
-    else:
-        log("nmap: sin resultado (fallo o timeout)")
+    missing_tools = preflight.check_and_install()
 
-    log("nuclei: en marcha...")
-    result = run_module(
-        nuclei_scan.run, target,
-        timeout=MODULE_TIMEOUTS["nuclei"], label="nuclei", on_error=log,
-    )
-    if result:
-        findings.extend(result)
-        log(f"nuclei: hecho — {len(result)} hallazgos")
+    if "nmap" in missing_tools:
+        log("nmap: omitido (binario no encontrado)")
     else:
-        log("nuclei: sin resultado (fallo, timeout o nada que reportar)")
+        log("nmap: en marcha...")
+        result = run_module(
+            nmap_scan.run, target,
+            timeout=MODULE_TIMEOUTS["nmap"], label="nmap", on_error=log,
+        )
+        if result:
+            findings.extend(result)
+            log(f"nmap: hecho — {len(result)} puertos abiertos")
+        else:
+            log("nmap: sin resultado (fallo o timeout)")
 
-    log("ffuf: en marcha...")
-    result = run_module(
-        ffuf_scan.run, target,
-        timeout=MODULE_TIMEOUTS["ffuf"], label="ffuf", on_error=log,
-    )
-    if result:
-        findings.extend(result)
-        log(f"ffuf: hecho — {len(result)} rutas encontradas")
+    if "nuclei" in missing_tools:
+        log("nuclei: omitido (binario no encontrado)")
     else:
-        log("ffuf: sin resultado (fallo, timeout o nada que reportar)")
+        log("nuclei: en marcha...")
+        result = run_module(
+            nuclei_scan.run, target,
+            timeout=MODULE_TIMEOUTS["nuclei"], label="nuclei", on_error=log,
+        )
+        if result:
+            findings.extend(result)
+            log(f"nuclei: hecho — {len(result)} hallazgos")
+        else:
+            log("nuclei: sin resultado (fallo, timeout o nada que reportar)")
+
+    if "ffuf" in missing_tools:
+        log("ffuf: omitido (binario no encontrado)")
+    else:
+        log("ffuf: en marcha...")
+        result = run_module(
+            ffuf_scan.run, target,
+            timeout=MODULE_TIMEOUTS["ffuf"], label="ffuf", on_error=log,
+        )
+        if result:
+            findings.extend(result)
+            log(f"ffuf: hecho — {len(result)} rutas encontradas")
+        else:
+            log("ffuf: sin resultado (fallo, timeout o nada que reportar)")
 
     out_path = out_dir / "findings.json"
     with open(out_path, "w", encoding="utf-8") as f:
