@@ -14,32 +14,49 @@ desde la metodología OWASP WSTG.
 
 ## Estado actual
 
-Primer corte, solo para validar el cableado del pipeline de punta a
-punta antes de sumar el resto de módulos:
+Hoja de ruta inicial completa, pipeline de punta a punta validado
+contra un lab real:
 
 - [x] Esqueleto del proyecto + CLI
 - [x] Wrapper de timeout por módulo (`run_module`/`MODULE_TIMEOUTS`)
-- [x] Módulo nmap (binario externo, sin lógica propia que reescribir)
-- [ ] Módulo nuclei — escrito, pendiente de validar contra un target
-      real (nmap/nuclei aún no instalados en esta máquina)
-- [ ] ffuf (dir + vhost) / katana / dalfox / trufflehog / wpscan
-- [ ] Sondas propias: SSTI, SSRF, XSS, Path Traversal, etc.
-- [ ] Preprocessor (agrupación + confianza) — portado de PocketHacker
-- [ ] Clasificador de pistas (dos tablas: hallazgo con evidencia vs.
-      patrón de ruta/nombre en bruto)
-- [ ] Informe final en terminal + guardado en .md
+- [x] Preflight: comprueba e instala el arsenal vía apt si falta algo
+- [x] Módulos de herramientas externas: nmap, nuclei, ffuf, katana,
+      dalfox (acoplado a katana), trufflehog — wpscan pendiente de
+      enganchar (necesita un lab WordPress para validarlo)
+- [x] Sondas propias (OWASP WSTG, clean-room): SSTI, SSRF (con
+      listener OOB propio para SSRF ciego), Path Traversal — XSS no
+      tiene sonda propia porque dalfox ya la cubre
+- [x] Tabla de pistas por patrón de ruta/nombre (`route_patterns.py`)
+- [x] Preprocessor (agrupación + confianza) — portado de PocketHacker
+- [x] Clasificador de pistas — redacción dubitativa uniforme
+- [x] Informe final en terminal + guardado en `.md`
 
-## Uso (de momento)
+Próximos pasos (sin hoja de ruta fija todavía): ampliar la tabla de
+patrones de ruta según lo que vaya apareciendo en más labs, enganchar
+wpscan cuando toque un target WordPress, y lo que surja al usarlo de
+verdad en más CTFs.
+
+## Uso
 
 ```
 python -m dojohack.cli <target>
 ```
 
-Guarda los hallazgos crudos en `output/<target>/findings.json`.
+Guarda en `output/<target>/`:
+- `findings.json` — hallazgos crudos de todos los módulos/sondas
+- `preprocessed.json` — agrupados + confianza calculada
+- `pistas.json` — pistas ya redactadas + contexto de reconocimiento
+- `informe.md` — el mismo contenido que se imprime en terminal, listo
+  para caer en un vault de Obsidian
 
 ## Requisitos
 
-- Python 3.10+
-- `nmap` instalado y en el PATH (pensado para correr en la VM Kali del
-  lab de CTF, no en Windows — ver nota de timeouts en
-  `dojohack/timeouts.py`)
+- Python 3.10+ y las dependencias de `requirements.txt` (`httpx`,
+  usado por las sondas propias)
+- Kali Linux, con `nmap`, `nuclei`, `ffuf` + `seclists`, `katana`,
+  `dalfox`, `trufflehog` y `wpscan` en el PATH — si falta alguno, el
+  preflight del pipeline intenta instalarlo solo vía apt (necesita
+  sudo interactivo, por eso hace falta una terminal real, no vale
+  lanzarlo sin TTY)
+- Pensado para correr en la VM Kali del lab de CTF, no en Windows —
+  ver nota de timeouts en `dojohack/timeouts.py`
