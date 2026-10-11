@@ -10,7 +10,7 @@ TAI; sin prisa con este proyecto.
 ## Decisiones ya tomadas (no las reabras sin que Paco lo pida)
 
 - **Proyecto totalmente aparte de PocketHacker** (su app/plataforma de
-  pentesting móvil, repo hermano en `D:\proyectos\PocketHacker`,
+  pentesting móvil, repo hermano en `~/PocketHacker` en esta Kali,
   Android/Kotlin con backend Python en `pockethacker_debian`). No es
   un modo dentro de ese repo.
 - **Clean-room completo**: PocketHacker depende de `wstg-scan`
@@ -65,7 +65,7 @@ Sí (código propio, nada que ver con wstg-scan):
 - El patrón de timeout por módulo (ya portado, ver arriba).
 - `preprocessor.py` (agrupación de duplicados + detección de
   confianza por reglas) — portar casi tal cual cuando toque esa fase;
-  vive en `D:\proyectos\PocketHacker\pocketHacker_debian\preprocessor.py`
+  vive en `~/PocketHacker/pocketHacker_debian/preprocessor.py`
   si hace falta consultarlo.
 - El esqueleto de `rule_classifier.py` (patrón→plantilla por tipo de
   vulnerabilidad) — mismo esqueleto, redacción distinta (pista, no
