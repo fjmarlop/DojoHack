@@ -18,7 +18,7 @@ from pathlib import Path
 from . import preflight
 from .modules import dalfox_scan, ffuf_scan, katana_scan, nmap_scan, nuclei_scan, trufflehog_scan
 from .probes import common as probe_common
-from .probes import ssrf, ssti
+from .probes import path_traversal, ssrf, ssti
 from .timeouts import MODULE_TIMEOUTS, run_module
 
 
@@ -157,6 +157,17 @@ def main() -> int:
         log(f"ssrf: hecho — {len(result)} hallazgos")
     else:
         log("ssrf: sin resultado (fallo, timeout, sin puntos de inyección, o nada que reportar)")
+
+    log(f"path_traversal: en marcha... ({len(injection_points)} puntos de inyección)")
+    result = run_module(
+        path_traversal.run, injection_points,
+        timeout=MODULE_TIMEOUTS["path_traversal"], label="path_traversal", on_error=log,
+    )
+    if result:
+        findings.extend(result)
+        log(f"path_traversal: hecho — {len(result)} hallazgos")
+    else:
+        log("path_traversal: sin resultado (fallo, timeout, sin puntos de inyección, o nada que reportar)")
 
     out_path = out_dir / "findings.json"
     with open(out_path, "w", encoding="utf-8") as f:

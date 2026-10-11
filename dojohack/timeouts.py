@@ -29,6 +29,7 @@ MODULE_TIMEOUTS = {
     "trufflehog": 300,
     "ssti": 300,
     "ssrf": 300,
+    "path_traversal": 300,
 }
 
 _HAS_ALARM = hasattr(signal, "SIGALRM")
