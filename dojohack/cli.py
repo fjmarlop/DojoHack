@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 from . import preflight
-from .modules import ffuf_scan, nmap_scan, nuclei_scan
+from .modules import ffuf_scan, katana_scan, nmap_scan, nuclei_scan
 from .timeouts import MODULE_TIMEOUTS, run_module
 
 
@@ -84,6 +84,20 @@ def main() -> int:
             log(f"ffuf: hecho — {len(result)} rutas encontradas")
         else:
             log("ffuf: sin resultado (fallo, timeout o nada que reportar)")
+
+    if "katana" in missing_tools:
+        log("katana: omitido (binario no encontrado)")
+    else:
+        log("katana: en marcha...")
+        result = run_module(
+            katana_scan.run, target,
+            timeout=MODULE_TIMEOUTS["katana"], label="katana", on_error=log,
+        )
+        if result:
+            findings.extend(result)
+            log(f"katana: hecho — {len(result)} endpoints encontrados")
+        else:
+            log("katana: sin resultado (fallo, timeout o nada que reportar)")
 
     out_path = out_dir / "findings.json"
     with open(out_path, "w", encoding="utf-8") as f:
