@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-from .modules import nmap_scan, nuclei_scan
+from .modules import ffuf_scan, nmap_scan, nuclei_scan
 from .timeouts import MODULE_TIMEOUTS, run_module
 
 
@@ -61,6 +61,17 @@ def main() -> int:
         log(f"nuclei: hecho — {len(result)} hallazgos")
     else:
         log("nuclei: sin resultado (fallo, timeout o nada que reportar)")
+
+    log("ffuf: en marcha...")
+    result = run_module(
+        ffuf_scan.run, target,
+        timeout=MODULE_TIMEOUTS["ffuf"], label="ffuf", on_error=log,
+    )
+    if result:
+        findings.extend(result)
+        log(f"ffuf: hecho — {len(result)} rutas encontradas")
+    else:
+        log("ffuf: sin resultado (fallo, timeout o nada que reportar)")
 
     out_path = out_dir / "findings.json"
     with open(out_path, "w", encoding="utf-8") as f:

@@ -23,6 +23,7 @@ from contextlib import contextmanager
 MODULE_TIMEOUTS = {
     "nmap": 300,
     "nuclei": 600,
+    "ffuf": 600,
 }
 
 _HAS_ALARM = hasattr(signal, "SIGALRM")
