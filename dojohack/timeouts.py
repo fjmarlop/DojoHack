@@ -26,6 +26,7 @@ MODULE_TIMEOUTS = {
     "ffuf": 600,
     "katana": 300,
     "dalfox": 600,
+    "trufflehog": 300,
 }
 
 _HAS_ALARM = hasattr(signal, "SIGALRM")

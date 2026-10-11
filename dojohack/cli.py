@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 from . import preflight
-from .modules import dalfox_scan, ffuf_scan, katana_scan, nmap_scan, nuclei_scan
+from .modules import dalfox_scan, ffuf_scan, katana_scan, nmap_scan, nuclei_scan, trufflehog_scan
 from .timeouts import MODULE_TIMEOUTS, run_module
 
 
@@ -115,6 +115,20 @@ def main() -> int:
             log(f"dalfox: hecho — {len(result)} XSS encontrados")
         else:
             log("dalfox: sin resultado (fallo, timeout o nada que reportar)")
+
+    if "trufflehog" in missing_tools:
+        log("trufflehog: omitido (binario no encontrado)")
+    else:
+        log("trufflehog: en marcha...")
+        result = run_module(
+            trufflehog_scan.run, target,
+            timeout=MODULE_TIMEOUTS["trufflehog"], label="trufflehog", on_error=log,
+        )
+        if result:
+            findings.extend(result)
+            log(f"trufflehog: hecho — {len(result)} secretos encontrados")
+        else:
+            log("trufflehog: sin resultado (fallo, timeout, no expone .git, o nada que reportar)")
 
     out_path = out_dir / "findings.json"
     with open(out_path, "w", encoding="utf-8") as f:
