@@ -39,8 +39,17 @@ verdad en más CTFs.
 ## Uso
 
 ```
-python -m dojohack.cli <target>
+python -m dojohack.cli <target> [--base-path /subdir]
 ```
+
+El target web real no siempre está en `http://target/` puerto 80: si
+nmap encuentra varios puertos http(s), el pipeline los escanea todos;
+si la app está en un subdirectorio (ej. un WordPress en `/wordpress`,
+visto de primera mano en un lab real), `--base-path` lo indica. Si
+`target` es una IP y la raíz huele a vhost por defecto (Apache/Nginx/
+IIS placeholder), el pipeline avisa — puede que haga falta el hostname
+real en vez de la IP (ver `dojohack/web_targets.py` y
+`dojohack/vhost_check.py`).
 
 Guarda en `output/<target>/`:
 - `findings.json` — hallazgos crudos de todos los módulos/sondas
