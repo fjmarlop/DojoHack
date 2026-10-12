@@ -16,9 +16,12 @@ silencio. La redacción es otra: apunta a la técnica a explorar, nunca
 
 Categorías que NO se convierten en pista (van a "contexto": recon
 puro, sin ninguna técnica que sugerir por sí mismas) — PORT, FFUF,
-KATANA. Lo que sí merece ser pista dentro de FFUF/KATANA ya salió
-como su propia categoría (RUTA_SOSPECHOSA, ver route_patterns.py);
-repetir cada URL/puerto crudo como "pista" solo sería ruido.
+KATANA, ARJUN. Lo que sí merece ser pista dentro de FFUF/KATANA ya
+salió como su propia categoría (RUTA_SOSPECHOSA, ver
+route_patterns.py); los parámetros que encuentra ARJUN alimentan
+directamente a las sondas propias (ver cli.py) — si alguno resulta
+inyectable, la pista sale de esa sonda, no de ARJUN. Repetir cada
+URL/puerto/parámetro crudo como "pista" aparte solo sería ruido.
 
 Categorías que ya redactan su propia pista final dubitativa al
 generarse (las sondas propias y la tabla de patrones de ruta) pasan
@@ -27,7 +30,7 @@ casi sin tocar — solo se homogeneiza el formato de salida.
 
 import re
 
-CATEGORIAS_CONTEXTO = {"PORT", "FFUF", "KATANA"}
+CATEGORIAS_CONTEXTO = {"PORT", "FFUF", "KATANA", "ARJUN"}
 
 CATEGORIAS_YA_REDACTADAS = {"SSTI", "SSRF", "PATH_TRAVERSAL", "SQLI", "COMMAND_INJECTION", "RUTA_SOSPECHOSA", "VHOST_FUZZ"}
 
@@ -116,6 +119,19 @@ def _redact_nmap_script(grupo: dict) -> str:
     return f"nmap dejó esta nota de un script: {texto[:250]}. Puede que no sea gran cosa por sí sola, pero es otra pieza de reconocimiento."
 
 
+def _redact_testssl(grupo: dict) -> str:
+    texto = grupo["evidencia"][0]
+    severidad = (grupo["severidad_origen"] or ["info"])[0]
+    if severidad in ("critical", "high"):
+        return f"testssl marcó algo serio en la configuración TLS: {texto}. Vale la pena mirarlo con calma."
+    return f"testssl dejó esta nota sobre la configuración TLS: {texto}. Dato de reconocimiento sobre cifrados/certificado/protocolos."
+
+
+def _redact_enum4linux(grupo: dict) -> str:
+    texto = grupo["evidencia"][0]
+    return f"enum4linux-ng sacó esto de SMB/LDAP: {texto[:300]}. Dato de reconocimiento — revisa a mano qué hay de interés (usuarios, shares, política de contraseñas...)."
+
+
 def _redact_wpscan(grupo: dict) -> str:
     texto = grupo["evidencia"][0]
 
@@ -168,6 +184,8 @@ _REDACTORES = {
     "TRUFFLEHOG": _redact_trufflehog,
     "WPSCAN": _redact_wpscan,
     "NMAP_SCRIPT": _redact_nmap_script,
+    "ENUM4LINUX": _redact_enum4linux,
+    "TESTSSL": _redact_testssl,
 }
 
 

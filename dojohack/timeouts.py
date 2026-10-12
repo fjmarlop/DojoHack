@@ -34,6 +34,9 @@ MODULE_TIMEOUTS = {
     "sqli": 300,
     "command_injection": 300,
     "vhost_fuzz": 300,
+    "enum4linux": 180,
+    "arjun": 600,  # una invocacion por URL de katana, cada una puede tardar >1min con la wordlist grande por defecto
+    "testssl": 300,
 }
 
 _HAS_ALARM = hasattr(signal, "SIGALRM")

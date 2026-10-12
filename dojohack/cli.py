@@ -20,7 +20,18 @@ import sys
 from pathlib import Path
 
 from . import classifier, preflight, preprocessor, report, route_patterns, vhost_check, vhost_fuzz, web_targets
-from .modules import dalfox_scan, ffuf_scan, katana_scan, nmap_scan, nuclei_scan, trufflehog_scan, wpscan_scan
+from .modules import (
+    arjun_scan,
+    dalfox_scan,
+    enum4linux_scan,
+    ffuf_scan,
+    katana_scan,
+    nmap_scan,
+    nuclei_scan,
+    testssl_scan,
+    trufflehog_scan,
+    wpscan_scan,
+)
 from .probes import command_injection, sqli
 from .probes import common as probe_common
 from .probes import path_traversal, ssrf, ssti
@@ -66,6 +77,22 @@ def _scan_web_target(wt, missing_tools: set, multiple: bool) -> list[dict]:
                 })
             else:
                 wlog("vhost_fuzz: ningún candidato (puede que no sea vhosting, o que el nombre no esté en la wordlist)")
+
+    if wt.scheme != "https":
+        wlog("testssl: omitido (no es https)")
+    elif "testssl" in missing_tools:
+        wlog("testssl: omitido (binario no encontrado)")
+    else:
+        wlog("testssl: en marcha...")
+        result = run_module(
+            testssl_scan.run, wt,
+            timeout=MODULE_TIMEOUTS["testssl"], label="testssl", on_error=wlog,
+        )
+        if result:
+            findings.extend(result)
+            wlog(f"testssl: hecho — {len(result)} hallazgos")
+        else:
+            wlog("testssl: sin resultado (fallo, timeout, o nada que reportar)")
 
     ffuf_urls: list = []
     if "ffuf" in missing_tools:
@@ -151,7 +178,25 @@ def _scan_web_target(wt, missing_tools: set, multiple: bool) -> list[dict]:
         else:
             wlog("wpscan: sin resultado (fallo, timeout, no es WordPress, o nada que reportar)")
 
-    injection_points = probe_common.from_urls(katana_urls) + probe_common.from_forms(katana_forms)
+    arjun_points: list = []
+    if "arjun" in missing_tools:
+        wlog("arjun: omitido (binario no encontrado)")
+    elif not katana_urls:
+        wlog("arjun: omitido (katana no encontró endpoints que probar)")
+    else:
+        wlog(f"arjun: en marcha... ({len(katana_urls)} endpoints a comprobar)")
+        descubiertos = run_module(
+            arjun_scan.discover, katana_urls,
+            timeout=MODULE_TIMEOUTS["arjun"], label="arjun", on_error=wlog,
+        )
+        if descubiertos:
+            findings.extend(arjun_scan.parse_findings(descubiertos))
+            arjun_points = arjun_scan.parse_injection_points(descubiertos)
+            wlog(f"arjun: hecho — {sum(len(p) for p in descubiertos.values())} parámetros ocultos en {len(descubiertos)} endpoint(s)")
+        else:
+            wlog("arjun: sin resultado (fallo, timeout, o ningún parámetro oculto)")
+
+    injection_points = probe_common.from_urls(katana_urls) + probe_common.from_forms(katana_forms) + arjun_points
 
     wlog(f"ssti: en marcha... ({len(injection_points)} puntos de inyección)")
     result = run_module(
@@ -276,6 +321,27 @@ def main() -> int:
             log(f"nuclei: hecho — {len(result)} hallazgos")
         else:
             log("nuclei: sin resultado (fallo, timeout o nada que reportar)")
+
+    smb_ldap_ports = ("139/tcp", "445/tcp", "389/tcp", "636/tcp")
+    tiene_smb_o_ldap = any(
+        f.get("name") == "PORT" and f.get("detail", "").startswith(smb_ldap_ports)
+        for f in port_findings
+    )
+    if not tiene_smb_o_ldap:
+        log("enum4linux-ng: omitido (nmap no vio SMB/LDAP abiertos)")
+    elif "enum4linux-ng" in missing_tools:
+        log("enum4linux-ng: omitido (binario no encontrado)")
+    else:
+        log("enum4linux-ng: en marcha...")
+        result = run_module(
+            enum4linux_scan.run, target,
+            timeout=MODULE_TIMEOUTS["enum4linux"], label="enum4linux", on_error=log,
+        )
+        if result:
+            findings.extend(result)
+            log(f"enum4linux-ng: hecho — {len(result)} hallazgos")
+        else:
+            log("enum4linux-ng: sin resultado (fallo, timeout, sin sesión SMB/LDAP, o nada que reportar)")
 
     multiple = len(resolved_targets) > 1
     for wt in resolved_targets:

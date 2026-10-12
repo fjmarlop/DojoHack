@@ -27,6 +27,9 @@ REQUIRED_TOOLS = {
     "dalfox": "dalfox",
     "trufflehog": "trufflehog",
     "wpscan": "wpscan",
+    "enum4linux-ng": "enum4linux-ng",
+    "arjun": "arjun",
+    "testssl": "testssl.sh",  # binario se llama "testssl", el paquete de apt es "testssl.sh"
 }
 
 
