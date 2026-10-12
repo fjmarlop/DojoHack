@@ -22,9 +22,10 @@ cualquier ruta sin que haya un repo de verdad.
 """
 
 import json
-import subprocess
 import urllib.error
 import urllib.request
+
+from .. import subprocess_utils
 
 
 def _exposes_git(target: str) -> bool:
@@ -47,9 +48,9 @@ def run(target: str) -> list[dict]:
         return []
 
     git_url = f"http://{target}/.git/"
-    proc = subprocess.run(
+    proc = subprocess_utils.run(
         ["trufflehog", "git", git_url, "--json", "--no-update"],
-        capture_output=True, text=True,
+        text=True,
     )
     if proc.returncode != 0 and not proc.stdout.strip():
         raise RuntimeError(f"trufflehog devolvió código {proc.returncode}: {proc.stderr[:300]}")

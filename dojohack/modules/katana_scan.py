@@ -37,7 +37,8 @@ módulos, en vez de que dalfox repita el crawl por su cuenta.
 """
 
 import json
-import subprocess
+
+from .. import subprocess_utils
 
 
 def crawl(target: str) -> str:
@@ -45,12 +46,12 @@ def crawl(target: str) -> str:
     jsonl (una línea JSON por request). El timeout lo controla
     dojohack.timeouts.run_module, no esta función."""
     url = f"http://{target}"
-    proc = subprocess.run(
+    proc = subprocess_utils.run(
         [
             "katana", "-u", url,
             "-jsonl", "-silent", "-jc", "-kf", "all", "-fx",
         ],
-        capture_output=True, text=True,
+        text=True,
     )
     if proc.returncode != 0 and not proc.stdout.strip():
         raise RuntimeError(f"katana devolvió código {proc.returncode}: {proc.stderr[:300]}")

@@ -20,9 +20,10 @@ versiones.
 """
 
 import json
-import subprocess
 import tempfile
 from pathlib import Path
+
+from .. import subprocess_utils
 
 
 def run(target: str, urls: list[str] | None = None) -> list[dict]:
@@ -37,9 +38,9 @@ def run(target: str, urls: list[str] | None = None) -> list[dict]:
         urls_path = tmp.name
 
     try:
-        proc = subprocess.run(
+        proc = subprocess_utils.run(
             ["dalfox", "scan", urls_path, "-f", "json", "--silence"],
-            capture_output=True, text=True,
+            text=True,
         )
         if proc.returncode != 0 and not proc.stdout.strip():
             raise RuntimeError(f"dalfox devolvió código {proc.returncode}: {proc.stderr[:300]}")

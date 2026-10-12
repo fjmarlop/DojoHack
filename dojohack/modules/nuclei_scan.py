@@ -12,7 +12,8 @@ y barras de progreso pensadas para humanos, no para parsear.
 """
 
 import json
-import subprocess
+
+from .. import subprocess_utils
 
 
 def run(target: str) -> list[dict]:
@@ -20,9 +21,9 @@ def run(target: str) -> list[dict]:
     matcheado, con el mismo convenio que el resto de módulos:
     {"name", "detail", "severity"}. El timeout lo controla
     dojohack.timeouts.run_module, no esta función."""
-    proc = subprocess.run(
+    proc = subprocess_utils.run(
         ["nuclei", "-target", target, "-jsonl", "-silent", "-no-color"],
-        capture_output=True, text=True,
+        text=True,
     )
     # A diferencia de nmap, un código de salida != 0 en nuclei no
     # siempre significa fallo (p.ej. puede devolver distinto de 0 por
