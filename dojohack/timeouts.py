@@ -31,6 +31,9 @@ MODULE_TIMEOUTS = {
     "ssti": 300,
     "ssrf": 300,
     "path_traversal": 300,
+    "sqli": 300,
+    "command_injection": 300,
+    "vhost_fuzz": 300,
 }
 
 _HAS_ALARM = hasattr(signal, "SIGALRM")

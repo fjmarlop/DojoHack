@@ -42,7 +42,7 @@ from collections import defaultdict
 # emiten hallazgo cuando ya verificaron evidencia real — su
 # confianza es siempre "confirmado", sin necesidad de inferirla de
 # un texto que a propósito nunca lo dice.
-CATEGORIAS_SIEMPRE_CONFIRMADAS = {"SSTI", "SSRF", "PATH_TRAVERSAL"}
+CATEGORIAS_SIEMPRE_CONFIRMADAS = {"SSTI", "SSRF", "PATH_TRAVERSAL", "SQLI", "COMMAND_INJECTION"}
 
 # --- Reglas de ruido: datos sin valor de seguridad real ---
 NOISE_PATTERNS = [

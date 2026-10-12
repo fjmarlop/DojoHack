@@ -19,8 +19,9 @@ import json
 import sys
 from pathlib import Path
 
-from . import classifier, preflight, preprocessor, report, route_patterns, vhost_check, web_targets
+from . import classifier, preflight, preprocessor, report, route_patterns, vhost_check, vhost_fuzz, web_targets
 from .modules import dalfox_scan, ffuf_scan, katana_scan, nmap_scan, nuclei_scan, trufflehog_scan, wpscan_scan
+from .probes import command_injection, sqli
 from .probes import common as probe_common
 from .probes import path_traversal, ssrf, ssti
 from .timeouts import MODULE_TIMEOUTS, run_module
@@ -46,6 +47,25 @@ def _scan_web_target(wt, missing_tools: set, multiple: bool) -> list[dict]:
     aviso_vhost = vhost_check.check(wt)
     if aviso_vhost:
         wlog(f"⚠️ {aviso_vhost}")
+        if "ffuf" not in missing_tools:
+            wlog("vhost_fuzz: probando nombres de host habituales para encontrar el vhost real...")
+            candidatos = run_module(
+                vhost_fuzz.fuzz, wt,
+                timeout=MODULE_TIMEOUTS["vhost_fuzz"], label="vhost_fuzz", on_error=wlog,
+            )
+            if candidatos:
+                wlog(f"vhost_fuzz: {len(candidatos)} candidato(s) a hostname real: {', '.join(candidatos)}")
+                findings.append({
+                    "name": "VHOST_FUZZ",
+                    "detail": (
+                        f"posible(s) hostname(s) real(es) encontrado(s) fuzzeando la "
+                        f"cabecera Host: {', '.join(candidatos)}. Prueba a relanzar "
+                        f"dojohack con ese hostname en vez de la IP."
+                    ),
+                    "severity": "info",
+                })
+            else:
+                wlog("vhost_fuzz: ningún candidato (puede que no sea vhosting, o que el nombre no esté en la wordlist)")
 
     ffuf_urls: list = []
     if "ffuf" in missing_tools:
@@ -165,6 +185,28 @@ def _scan_web_target(wt, missing_tools: set, multiple: bool) -> list[dict]:
         wlog(f"path_traversal: hecho — {len(result)} hallazgos")
     else:
         wlog("path_traversal: sin resultado (fallo, timeout, sin puntos de inyección, o nada que reportar)")
+
+    wlog(f"sqli: en marcha... ({len(injection_points)} puntos de inyección)")
+    result = run_module(
+        sqli.run, injection_points,
+        timeout=MODULE_TIMEOUTS["sqli"], label="sqli", on_error=wlog,
+    )
+    if result:
+        findings.extend(result)
+        wlog(f"sqli: hecho — {len(result)} hallazgos")
+    else:
+        wlog("sqli: sin resultado (fallo, timeout, sin puntos de inyección, o nada que reportar)")
+
+    wlog(f"command_injection: en marcha... ({len(injection_points)} puntos de inyección)")
+    result = run_module(
+        command_injection.run, injection_points,
+        timeout=MODULE_TIMEOUTS["command_injection"], label="command_injection", on_error=wlog,
+    )
+    if result:
+        findings.extend(result)
+        wlog(f"command_injection: hecho — {len(result)} hallazgos")
+    else:
+        wlog("command_injection: sin resultado (fallo, timeout, sin puntos de inyección, o nada que reportar)")
 
     return findings
 
