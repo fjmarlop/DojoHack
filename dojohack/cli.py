@@ -15,7 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import classifier, preflight, preprocessor, report, route_patterns
+from . import classifier, preflight, preprocessor, report, route_patterns, vhost_check
 from .modules import dalfox_scan, ffuf_scan, katana_scan, nmap_scan, nuclei_scan, trufflehog_scan
 from .probes import common as probe_common
 from .probes import path_traversal, ssrf, ssti
@@ -42,6 +42,10 @@ def main() -> int:
     findings: list = []
 
     log(f"objetivo: {target}")
+
+    aviso_vhost = vhost_check.check(target)
+    if aviso_vhost:
+        log(f"⚠️ {aviso_vhost}")
 
     missing_tools = preflight.check_and_install()
 
