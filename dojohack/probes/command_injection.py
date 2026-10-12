@@ -11,10 +11,16 @@ Dos técnicas, misma estructura que sqli.py/ssti.py/path_traversal.py:
 1. Basada en salida: inyecta el parámetro encadenado con un comando
    inocuo (id en Linux, whoami en Windows) usando varios separadores
    de shell (; | $() `` ` `` &) y busca en la respuesta algo que
-   parezca la salida real de ese comando (uid=.../gid=... en Linux,
-   DOMINIO\\usuario en Windows) — si el backend pasa el input a una
-   shell sin sanear, el comando se ejecuta de verdad y su salida
-   puede acabar reflejada en la respuesta.
+   parezca la salida real de ese comando — solo se reconoce el patrón
+   de Linux (uid=.../gid=...), nunca "algo\algo" genérico para
+   Windows: contra un lab real, ese patrón suelto coincidió con
+   🏳 (el escape JSON de un emoji que WordPress incrusta en
+   su script de detección de emojis, presente en CUALQUIER página),
+   generando 24 falsos positivos idénticos. Además de recortar el
+   patrón, se compara contra una respuesta de referencia sin payload
+   — si la "salida" ya estaba ahí antes de inyectar nada, no cuenta
+   (mismo principio que el resto de sondas: una coincidencia no es
+   evidencia si ya estaba antes del payload).
 
 2. Ciega por tiempo: igual que en sqli.py, inyecta un retardo (sleep
    en Linux, ping como aproximación en Windows — Windows no tiene un
@@ -44,8 +50,10 @@ OUTPUT_PAYLOADS = [
     ("Linux, backticks", "`id`"),
     ("Windows, encadenado con &", "& whoami"),
 ]
-# uid=1000(usuario) gid=... de Linux, o DOMINIO\usuario / equipo\usuario de Windows
-OUTPUT_SIGNATURE = re.compile(r"uid=\d+\([^)]*\)|[a-z0-9_-]+\\[a-z0-9_.-]+", re.I)
+# uid=1000(usuario) gid=... de Linux. Deliberadamente NO se reconoce
+# "algo\algo" como firma de "DOMINIO\usuario" de Windows — ver nota
+# arriba sobre por qué eso fue un falso positivo real contra un lab.
+OUTPUT_SIGNATURE = re.compile(r"uid=\d+\([^)]*\)", re.I)
 
 TIME_PAYLOADS = [
     ("Linux, encadenado con ;", f"; sleep {SLEEP_SECONDS}"),
@@ -80,24 +88,25 @@ def _finding(point: dict, evidencia: str) -> dict:
 
 
 def _test_point(client: httpx.Client, point: dict) -> dict | None:
+    try:
+        baseline_body, baseline = _send(client, point, "1")
+    except httpx.HTTPError:
+        return None
+
     for nombre, payload in OUTPUT_PAYLOADS:
         try:
             body, _ = _send(client, point, payload)
         except httpx.HTTPError:
             continue
         m = OUTPUT_SIGNATURE.search(body)
-        if m and payload not in body:
+        if m and payload not in body and m.group(0) not in baseline_body:
             return _finding(
                 point,
                 f"al meter un payload encadenando comandos ({nombre}) apareció "
                 f"en la respuesta algo que parece salida real de un comando "
-                f"('{m.group(0)}')",
+                f"('{m.group(0)}'), que no estaba ya en una respuesta de "
+                f"referencia sin ese payload",
             )
-
-    try:
-        _, baseline = _send(client, point, "1")
-    except httpx.HTTPError:
-        return None
 
     for nombre, payload in TIME_PAYLOADS:
         try:
