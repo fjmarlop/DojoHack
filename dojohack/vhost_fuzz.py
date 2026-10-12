@@ -11,11 +11,27 @@ Usa ffuf (ya en el arsenal, con su propio modo de fuzzing de
 cabeceras: -H "Host: FUZZ") en vez de un binario nuevo — mismo patrón
 que el resto del proyecto: una herramienta, muchos usos.
 
-Se calibra con una sola petición de referencia (sin Host forzado) y se
-descarta esa talla exacta con -fs — mismo principio que el filtro anti
-catch-all de ffuf_scan.py, pero aquí lo que se busca es justo lo
-contrario de lo que allí se descartaba: una respuesta DISTINTA a la
-página por defecto es la señal de que se encontró el vhost real.
+Se calibra con dos peticiones de referencia usando un Host claramente
+inventado (al azar, no "sin cabecera Host") y se descarta esa talla
+exacta con -fs — mismo principio que el filtro anti catch-all de
+ffuf_scan.py, pero aquí lo que se busca es justo lo contrario de lo
+que allí se descartaba: una respuesta DISTINTA a la página por
+defecto es la señal de que se encontró el vhost real.
+
+Importante: contra un lab real hay DOS clases distintas de "esto no es
+un vhost real", no una sola:
+1. Host no reconocido pero sintácticamente normal (ej. "blog",
+   "admin", una cadena aleatoria) → el vhost por defecto de Apache,
+   200 con el tamaño que se calibra aquí.
+2. Host puramente numérico o de alguna forma inválido (ej. "1", "100",
+   "www.1") → Apache responde 400 Bad Request (su propia página de
+   error genérica, un tamaño fijo distinto) ANTES de llegar siquiera a
+   elegir vhost. Calibrar solo contra la clase 1 (como se hacía antes
+   de este ajuste) deja pasar cualquier Host de la clase 2 como falso
+   "candidato" — confirmado: ~40 candidatos falsos contra un lab real,
+   todos Hosts numéricos de la wordlist. Por eso fuzz() también
+   descarta explícitamente el status 400 (nunca es un vhost real: si
+   lo fuera, no le daría Bad Request a su propio nombre correcto).
 
 LIMITACIÓN CONOCIDA: solo prueba palabras sueltas (admin, dev, blog,
 wordpress...), no FQDNs con una TLD inventada. No hay forma de
@@ -28,6 +44,8 @@ correcto: no hay ningún vhost que encontrar.
 
 import dataclasses
 import json
+import random
+import string
 import tempfile
 import urllib.error
 import urllib.request
@@ -38,14 +56,28 @@ from . import subprocess_utils
 DEFAULT_WORDLIST = "/usr/share/seclists/Discovery/DNS/subdomains-top1million-5000.txt"
 
 
-def _baseline_size(base_url: str) -> int | None:
-    try:
-        with urllib.request.urlopen(f"{base_url}/", timeout=10) as resp:
-            return len(resp.read())
-    except urllib.error.HTTPError as e:
-        return len(e.read())
-    except (urllib.error.URLError, OSError):
-        return None
+def _random_host(length: int = 16) -> str:
+    return "".join(random.choices(string.ascii_lowercase + string.digits, k=length))
+
+
+def _baseline_size(base_url: str, tries: int = 2) -> int | None:
+    """Tamaño de la respuesta a un Host claramente inventado (no la
+    ausencia de cabecera Host — ver nota del módulo). Si dos intentos
+    con nombres distintos no coinciden en talla, no se puede calibrar
+    con fiabilidad y se devuelve None (mejor no filtrar nada que
+    filtrar mal)."""
+    tallas = set()
+    for _ in range(tries):
+        host = _random_host()
+        try:
+            req = urllib.request.Request(f"{base_url}/", headers={"Host": host})
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                tallas.add(len(resp.read()))
+        except urllib.error.HTTPError as e:
+            tallas.add(len(e.read()))
+        except (urllib.error.URLError, OSError):
+            return None
+    return tallas.pop() if len(tallas) == 1 else None
 
 
 def fuzz(web_target, wordlist: str = DEFAULT_WORDLIST) -> list[str]:
@@ -72,7 +104,7 @@ def fuzz(web_target, wordlist: str = DEFAULT_WORDLIST) -> list[str]:
         proc = subprocess_utils.run(
             [
                 "ffuf", "-u", f"{base}/", "-H", "Host: FUZZ", "-w", wordlist,
-                "-fs", str(baseline_size), "-mc", "all",
+                "-fs", str(baseline_size), "-fc", "400", "-mc", "all",
                 "-o", out_path, "-of", "json", "-s",
             ],
             text=True,
