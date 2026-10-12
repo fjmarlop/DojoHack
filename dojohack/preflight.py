@@ -26,9 +26,7 @@ REQUIRED_TOOLS = {
     "katana": "katana",
     "dalfox": "dalfox",
     "trufflehog": "trufflehog",
-    # wpscan: todavía no hay módulo que lo use (pendiente de un lab
-    # WordPress para validarlo, ver README) — se añade aquí cuando se
-    # engancha, para no intentar instalarlo en cada pasada sin motivo.
+    "wpscan": "wpscan",
 }
 
 

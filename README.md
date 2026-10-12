@@ -21,8 +21,15 @@ contra un lab real:
 - [x] Wrapper de timeout por módulo (`run_module`/`MODULE_TIMEOUTS`)
 - [x] Preflight: comprueba e instala el arsenal vía apt si falta algo
 - [x] Módulos de herramientas externas: nmap, nuclei, ffuf, katana,
-      dalfox (acoplado a katana), trufflehog — wpscan pendiente de
-      enganchar (necesita un lab WordPress para validarlo)
+      dalfox (acoplado a katana), trufflehog, wpscan (enumeración
+      completa: plugins/temas/usuarios/backups — sin API token de
+      wpscan.com todavía, así que sin cruce contra su base de CVEs)
+- [x] Resolución de target web (`web_targets.py`): puerto/esquema a
+      partir de lo que encuentra nmap + `--base-path` si la app no
+      está en la raíz — validado contra dos labs reales (vhosting por
+      nombre y WordPress en un subdirectorio)
+- [x] Aviso de vhost equivocado (`vhost_check.py`) si target es una IP
+      y huele a vhost por defecto
 - [x] Sondas propias (OWASP WSTG, clean-room): SSTI, SSRF (con
       listener OOB propio para SSRF ciego), Path Traversal — XSS no
       tiene sonda propia porque dalfox ya la cubre
@@ -32,9 +39,10 @@ contra un lab real:
 - [x] Informe final en terminal + guardado en `.md`
 
 Próximos pasos (sin hoja de ruta fija todavía): ampliar la tabla de
-patrones de ruta según lo que vaya apareciendo en más labs, enganchar
-wpscan cuando toque un target WordPress, y lo que surja al usarlo de
-verdad en más CTFs.
+patrones de ruta y los redactores de pistas según lo que vaya
+apareciendo en más labs, considerar un token de wpscan.com si hace
+falta cruzar contra CVEs conocidos, y lo que surja al usarlo de verdad
+en más CTFs.
 
 ## Uso
 

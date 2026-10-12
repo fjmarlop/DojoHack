@@ -27,6 +27,7 @@ MODULE_TIMEOUTS = {
     "katana": 300,
     "dalfox": 600,
     "trufflehog": 300,
+    "wpscan": 600,  # ~230s en el lab de prueba con la enumeración completa (plugins/temas/usuarios/media)
     "ssti": 300,
     "ssrf": 300,
     "path_traversal": 300,

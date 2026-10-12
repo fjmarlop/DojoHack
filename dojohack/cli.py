@@ -20,7 +20,7 @@ import sys
 from pathlib import Path
 
 from . import classifier, preflight, preprocessor, report, route_patterns, vhost_check, web_targets
-from .modules import dalfox_scan, ffuf_scan, katana_scan, nmap_scan, nuclei_scan, trufflehog_scan
+from .modules import dalfox_scan, ffuf_scan, katana_scan, nmap_scan, nuclei_scan, trufflehog_scan, wpscan_scan
 from .probes import common as probe_common
 from .probes import path_traversal, ssrf, ssti
 from .timeouts import MODULE_TIMEOUTS, run_module
@@ -116,6 +116,20 @@ def _scan_web_target(wt, missing_tools: set, multiple: bool) -> list[dict]:
             wlog(f"trufflehog: hecho — {len(result)} secretos encontrados")
         else:
             wlog("trufflehog: sin resultado (fallo, timeout, no expone .git, o nada que reportar)")
+
+    if "wpscan" in missing_tools:
+        wlog("wpscan: omitido (binario no encontrado)")
+    else:
+        wlog("wpscan: en marcha...")
+        result = run_module(
+            wpscan_scan.run, wt,
+            timeout=MODULE_TIMEOUTS["wpscan"], label="wpscan", on_error=wlog,
+        )
+        if result:
+            findings.extend(result)
+            wlog(f"wpscan: hecho — {len(result)} hallazgos")
+        else:
+            wlog("wpscan: sin resultado (fallo, timeout, no es WordPress, o nada que reportar)")
 
     injection_points = probe_common.from_urls(katana_urls) + probe_common.from_forms(katana_forms)
 

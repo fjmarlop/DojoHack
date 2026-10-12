@@ -95,10 +95,57 @@ def _redact_trufflehog(grupo: dict) -> str:
     )
 
 
+def _redact_wpscan(grupo: dict) -> str:
+    texto = grupo["evidencia"][0]
+
+    if re.search(r"^WordPress \d", texto):
+        if "insecure" in texto or "estado: insecure" in texto:
+            return (
+                f"wpscan dice que el WordPress de esta instalación está "
+                f"desactualizado (versión conocida como insegura): {texto}. "
+                f"Podría tener parches de seguridad pendientes — valdría la "
+                f"pena mirar si hay algo público para esa versión."
+            )
+        return f"wpscan confirmó la versión de WordPress instalada: {texto}. Dato de reconocimiento."
+
+    if re.search(r"^plugin '", texto):
+        extra = " — y encima desactualizado" if "desactualizado" in texto else ""
+        return (
+            f"wpscan encontró un plugin instalado{extra}: {texto}. Sin un "
+            f"token de la API de wpscan no se puede saber aquí si tiene "
+            f"vulnerabilidades conocidas, pero es otra pieza de software de "
+            f"terceros expuesta — vale la pena mirarla a mano."
+        )
+
+    if re.search(r"^tema activo:", texto):
+        return f"wpscan identificó el tema activo de WordPress: {texto}. Dato de reconocimiento, por si hay algo público para ese tema/versión."
+
+    m = re.match(r"^usuario encontrado:\s*(.+)$", texto)
+    if m:
+        return (
+            f"wpscan encontró un usuario: {m.group(1)} — un nombre de "
+            f"usuario válido es justo lo que hace falta para intentar "
+            f"fuerza bruta o probar credenciales por defecto en /wp-login.php."
+        )
+
+    if re.search(r"xml-?rpc", texto, re.I):
+        return (
+            f"wpscan señala que xmlrpc.php está habilitado: {texto}. Suele "
+            f"servir para fuerza bruta más eficiente (multicall) o, según la "
+            f"configuración, otras técnicas vía pingback."
+        )
+
+    if re.search(r"listado de directorio|directory listing", texto, re.I):
+        return f"wpscan encontró un listado de directorio activado: {texto}. Puede dejar ver ficheros que no deberían ser públicos."
+
+    return f"wpscan dejó esta nota de reconocimiento sobre el WordPress: {texto[:200]}."
+
+
 _REDACTORES = {
     "NUCLEI": _redact_nuclei,
     "DALFOX": _redact_dalfox,
     "TRUFFLEHOG": _redact_trufflehog,
+    "WPSCAN": _redact_wpscan,
 }
 
 
