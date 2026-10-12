@@ -50,6 +50,7 @@ NOISE_PATTERNS = [
     (re.compile(r"\b(test|example|user|admin|new|foo|bar)@(example\.(com|org)|email\.com|test\.com)\b", re.I), "Email de ejemplo/placeholder, no un dato real"),
     (re.compile(r"\btech-detect\b|\b[\w-]+-detect\b", re.I), "Fingerprinting de tecnología (nuclei), sin implicación de seguridad"),
     (re.compile(r"ssh-server-enumeration|ssh-auth-methods", re.I), "Enumeración informativa de SSH (nuclei), sin implicación directa"),
+    (re.compile(r"\bssh-hostkey\b|\bssh2?-enum-algos\b", re.I), "Volcado de fingerprint/algoritmos de SSH (nmap -sC), sin implicación directa"),
 ]
 
 # --- Reglas de confianza (solo para hallazgos en bruto de módulos de

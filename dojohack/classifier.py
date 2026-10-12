@@ -95,6 +95,27 @@ def _redact_trufflehog(grupo: dict) -> str:
     )
 
 
+def _redact_nmap_script(grupo: dict) -> str:
+    texto = grupo["evidencia"][0]
+
+    if re.search(r"\bftp-anon\b", texto, re.I):
+        return (
+            f"nmap dice que el FTP permite login anónimo: {texto}. Si hay "
+            f"algo interesante en ese FTP, se podría leer (o incluso escribir, "
+            f"según permisos) sin credenciales."
+        )
+    if re.search(r"\bssl-cert\b", texto, re.I):
+        return (
+            f"nmap leyó el certificado TLS: {texto}. El nombre que trae "
+            f"(Common Name / Subject Alternative Name) puede ser el hostname "
+            f"real de la app, distinto del que se usó para escanear — vale la "
+            f"pena probarlo si hay vhosting por nombre de por medio."
+        )
+    if re.search(r"\bsmb-?(os-discovery|security-mode|protocols)\b", texto, re.I):
+        return f"nmap sacó esto de SMB: {texto}. Dato de reconocimiento, por si da pie a enumerar más o a alguna técnica específica de SMB."
+    return f"nmap dejó esta nota de un script: {texto[:250]}. Puede que no sea gran cosa por sí sola, pero es otra pieza de reconocimiento."
+
+
 def _redact_wpscan(grupo: dict) -> str:
     texto = grupo["evidencia"][0]
 
@@ -146,6 +167,7 @@ _REDACTORES = {
     "DALFOX": _redact_dalfox,
     "TRUFFLEHOG": _redact_trufflehog,
     "WPSCAN": _redact_wpscan,
+    "NMAP_SCRIPT": _redact_nmap_script,
 }
 
 

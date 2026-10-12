@@ -21,7 +21,7 @@ import sys
 from contextlib import contextmanager
 
 MODULE_TIMEOUTS = {
-    "nmap": 900,  # subido de 300s: ahora escanea -p- (65535 puertos, no solo el top-1000)
+    "nmap": 1000,  # -p- + -sC (scripts por defecto en cada puerto encontrado)
     "nuclei": 600,
     "ffuf": 600,
     "katana": 300,
