@@ -7,10 +7,16 @@ feedback en vivo, guardado) antes de sumar el resto de módulos.
 Usa -oX - (XML a stdout) en vez de parsear la salida de texto plano —
 mucho más fiable entre versiones de nmap que fiarse del formato de
 impresión, que cambia entre versiones.
+
+Usa -p- (los 65535 puertos, no solo el top-1000 por defecto de nmap):
+coherente con "arsenal completo, sin recortar por tratarse de CTF"
+(ver CLAUDE.md) — recortar aquí significaría no ver puertos altos
+poco habituales que en un CTF suelen ser justo donde está el reto.
 """
 
-import subprocess
 import xml.etree.ElementTree as ET
+
+from .. import subprocess_utils
 
 
 def run(target: str) -> list[dict]:
@@ -18,9 +24,9 @@ def run(target: str) -> list[dict]:
     con el mismo convenio que PocketHacker (preprocessor.py):
     {"name", "detail", "severity"}. El timeout lo controla
     dojohack.timeouts.run_module, no esta función."""
-    proc = subprocess.run(
-        ["nmap", "-Pn", "-sV", "-T4", "-oX", "-", target],
-        capture_output=True, text=True,
+    proc = subprocess_utils.run(
+        ["nmap", "-Pn", "-sV", "-p-", "-T4", "-oX", "-", target],
+        text=True,
     )
     if proc.returncode != 0:
         raise RuntimeError(f"nmap devolvió código {proc.returncode}: {proc.stderr[:300]}")
