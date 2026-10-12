@@ -15,13 +15,18 @@ real, 0 reflejados: la app de verdad no tiene ese problema.
 
 Este módulo NO intenta adivinar el hostname real (eso es trabajo de
 Paco: /etc/hosts, el SAN de un certificado TLS, nmap --script
-http-vhosts, fuzzing de Host...) — solo avisa de que target huele a
+http-vhosts, fuzzing de Host...) — solo avisa de que el host huele a
 vhost equivocado, antes de que el resto del pipeline se ponga a
 redactar pistas sobre una app que no es la real. No bloquea nada
 (coherente con "pipeline automático, sin pedir confirmaciones" — ver
 CLAUDE.md): solo es una línea más de feedback en vivo.
+
+check() recibe un dojohack.web_targets.WebTarget (no un string suelto)
+porque el vhost equivocado puede darse en cualquier puerto/esquema que
+nmap haya encontrado, no solo en http/80 — ver web_targets.py.
 """
 
+import dataclasses
 import ipaddress
 import urllib.error
 import urllib.request
@@ -99,23 +104,30 @@ def _probe(base_url: str) -> str | None:
     return "; ".join(señales)
 
 
-def check(target: str) -> str | None:
-    """Si target es una IP, hace una petición barata a la raíz (ver
-    _probe) para detectar señales de vhost por defecto. Devuelve un
-    mensaje de aviso (para que cli.py lo imprima con log()) o None si
-    target no es una IP, no responde, o no hay nada raro que señalar."""
-    if not _is_ip(target):
+def check(web_target) -> str | None:
+    """Si web_target.host es una IP, hace una petición barata a la raíz
+    de ese esquema/puerto (ver _probe) para detectar señales de vhost
+    por defecto. Deliberadamente ignora web_target.base_path — esto
+    comprueba el vhost del servidor, no un subdirectorio concreto de
+    la app; mezclar las dos cosas podría dar señales contradictorias
+    si la raíz y el subdirectorio se comportan distinto.
+
+    Devuelve un mensaje de aviso (para que cli.py lo imprima con
+    log()) o None si el host no es una IP, no responde, o no hay nada
+    raro que señalar."""
+    if not _is_ip(web_target.host):
         return None
 
-    señales = _probe(f"http://{target}")
+    base_url = dataclasses.replace(web_target, base_path="").base_url
+    señales = _probe(base_url)
     if not señales:
         return None
 
     return (
-        f"target es una IP ({target}) y la respuesta por esa IP huele a vhost "
-        f"por defecto, no a la app real: {señales}. Si el lab usa virtual "
-        f"hosting por nombre, ffuf/katana/dalfox/nuclei podrían estar "
-        f"escaneando el vhost equivocado sin que el pipeline se dé cuenta. "
-        f"Busca el hostname real (certificado TLS, /etc/hosts, nmap --script "
-        f"http-vhosts, fuzzing de Host) y relanza dojohack contra ese hostname."
+        f"{base_url} apunta a una IP y la respuesta huele a vhost por defecto, "
+        f"no a la app real: {señales}. Si el lab usa virtual hosting por "
+        f"nombre, ffuf/katana/dalfox/nuclei podrían estar escaneando el vhost "
+        f"equivocado sin que el pipeline se dé cuenta. Busca el hostname real "
+        f"(certificado TLS, /etc/hosts, nmap --script http-vhosts, fuzzing de "
+        f"Host) y relanza dojohack contra ese hostname."
     )

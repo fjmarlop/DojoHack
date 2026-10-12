@@ -11,8 +11,10 @@ raíz del target y se le escapen páginas con formularios en rutas que
 no son la raíz — como pasaba en este mismo lab con llevar.php).
 
 Si no se pasan urls (katana falló/se omitió, o no encontró nada), se
-cae a probar solo la URL raíz del target — peor cobertura, pero mejor
-que no ejecutar nada.
+cae a probar solo la URL raíz de web_target — peor cobertura, pero
+mejor que no ejecutar nada. Recibe un dojohack.web_targets.WebTarget
+para ese caso de fallback (ver ffuf_scan.py para el porqué); las urls
+de katana ya vienen completas, así que no necesitan web_target.
 
 Usa -f json (un único objeto JSON con todo el scan) en vez de la
 salida de consola — mismo motivo que el resto: formato estable entre
@@ -26,12 +28,12 @@ from pathlib import Path
 from .. import subprocess_utils
 
 
-def run(target: str, urls: list[str] | None = None) -> list[dict]:
+def run(web_target, urls: list[str] | None = None) -> list[dict]:
     """Devuelve una lista de hallazgos, uno por XSS detectado, con el
     mismo convenio que el resto de módulos: {"name", "detail",
     "severity"}. El timeout lo controla dojohack.timeouts.run_module,
     no esta función."""
-    urls = urls or [f"http://{target}/"]
+    urls = urls or [f"{web_target.base_url}/"]
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tmp:
         tmp.write("\n".join(urls))

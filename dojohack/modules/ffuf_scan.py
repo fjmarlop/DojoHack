@@ -23,8 +23,13 @@ LIMITACIONES CONOCIDAS (v1, a revisar si hace falta más adelante):
 - Solo fuzzing de directorios/rutas, sin extensiones de fichero
   (.php, .bak...) — eso es otra técnica, se añadirá aparte si hace
   falta, no entra en "fuzzing de directorios".
-- Asume esquema http. Si el target solo sirve https, hay que pasar
-  wordlist/target ya pensando en ello (no hay auto-detección todavía).
+
+Recibe un dojohack.web_targets.WebTarget (esquema/puerto/ruta base ya
+resueltos a partir de lo que encontró nmap — o del --base-path que se
+le haya pasado a mano), no un target suelto — así no asume siempre
+http en el puerto 80, ni la raíz como punto de partida (ver
+web_targets.py: la app puede estar en otro puerto, por https, o en un
+subdirectorio, como pasó con /wordpress en 192.168.72.134).
 
 FILTRO DE CALIBRACIÓN ANTI CATCH-ALL (añadido tras una ejecución real
 contra 192.168.72.132): sin -ac, un target que responde igual a
@@ -72,11 +77,11 @@ def _random_path(length: int) -> str:
     return "".join(random.choices(string.ascii_lowercase + string.digits, k=length))
 
 
-def _probe(target: str, path: str) -> tuple[int, int] | None:
-    """Una petición a target/path. Devuelve (status, longitud del
-    cuerpo) o None si la petición falla (en cuyo caso no se puede
-    calibrar nada — mejor no filtrar que filtrar a ciegas)."""
-    url = f"http://{target}/{path}"
+def _probe(web_target, path: str) -> tuple[int, int] | None:
+    """Una petición a web_target.base_url/path. Devuelve (status,
+    longitud del cuerpo) o None si la petición falla (en cuyo caso no
+    se puede calibrar nada — mejor no filtrar que filtrar a ciegas)."""
+    url = f"{web_target.base_url}/{path}"
     try:
         with urllib.request.urlopen(url, timeout=10) as resp:
             return resp.status, len(resp.read())
@@ -86,15 +91,15 @@ def _probe(target: str, path: str) -> tuple[int, int] | None:
         return None
 
 
-def _calibrate_catchall(target: str) -> tuple[int, int] | None:
-    """Caracteriza cómo responde target a rutas inventadas al azar.
+def _calibrate_catchall(web_target) -> tuple[int, int] | None:
+    """Caracteriza cómo responde web_target a rutas inventadas al azar.
     Devuelve (status, tamaño_base) si las muestras son consistentes
     entre sí (patrón catch-all: todo responde igual) o None si no
     (comportamiento normal, nada que filtrar)."""
     muestras = []
     for _ in range(_CALIBRATION_TRIES):
         path = _random_path(random.randint(10, 20))
-        resultado = _probe(target, path)
+        resultado = _probe(web_target, path)
         if resultado is None:
             return None
         status, length = resultado
@@ -116,19 +121,19 @@ def _is_catchall_hit(result: dict, calibracion: tuple[int, int]) -> bool:
     return abs((length - len(path)) - base0) <= _CALIBRATION_TOLERANCE
 
 
-def fuzz(target: str, wordlist: str = DEFAULT_WORDLIST) -> list[dict]:
-    """Ejecuta ffuf contra target y devuelve la lista de resultados
-    (uno por ruta que pasó el filtro -fc 404 y no coincide con el
-    patrón catch-all calibrado — ver nota arriba), tal cual los da su
-    salida -of json. Separado de parse_findings()/parse_urls() por el
-    mismo motivo que crawl() en katana_scan.py: la tabla de pistas por
-    patrón de ruta (dojohack.route_patterns) reutiliza estas mismas
-    rutas sin tener que relanzar el fuzzing. El timeout lo controla
-    dojohack.timeouts.run_module, no esta función."""
+def fuzz(web_target, wordlist: str = DEFAULT_WORDLIST) -> list[dict]:
+    """Ejecuta ffuf contra web_target.base_url y devuelve la lista de
+    resultados (uno por ruta que pasó el filtro -fc 404 y no coincide
+    con el patrón catch-all calibrado — ver nota arriba), tal cual los
+    da su salida -of json. Separado de parse_findings()/parse_urls()
+    por el mismo motivo que crawl() en katana_scan.py: la tabla de
+    pistas por patrón de ruta (dojohack.route_patterns) reutiliza
+    estas mismas rutas sin tener que relanzar el fuzzing. El timeout
+    lo controla dojohack.timeouts.run_module, no esta función."""
     if not Path(wordlist).is_file():
         raise RuntimeError(f"wordlist no encontrada: {wordlist}")
 
-    url = f"http://{target}/FUZZ"
+    url = f"{web_target.base_url}/FUZZ"
 
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
         out_path = tmp.name
@@ -152,7 +157,7 @@ def fuzz(target: str, wordlist: str = DEFAULT_WORDLIST) -> list[dict]:
 
     results = data.get("results", [])
 
-    calibracion = _calibrate_catchall(target)
+    calibracion = _calibrate_catchall(web_target)
     if calibracion is None:
         return results
 
@@ -190,9 +195,9 @@ def parse_urls(results: list[dict]) -> list[str]:
     return [r["url"] for r in results if r.get("url")]
 
 
-def run(target: str, wordlist: str = DEFAULT_WORDLIST) -> list[dict]:
+def run(web_target, wordlist: str = DEFAULT_WORDLIST) -> list[dict]:
     """Atajo para uso aislado del módulo (pruebas manuales, etc.):
     fuzz() + parse_findings() en un solo paso. cli.py no usa esta
     función directamente porque necesita reutilizar los resultados
     crudos para route_patterns — ver parse_urls()."""
-    return parse_findings(fuzz(target, wordlist))
+    return parse_findings(fuzz(web_target, wordlist))

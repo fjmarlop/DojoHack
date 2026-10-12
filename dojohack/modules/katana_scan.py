@@ -34,6 +34,9 @@ rastrea el sitio por su cuenta, solo analiza parámetros de las URLs
 que se le dan — decisión tomada con Paco). Separarlos permite que
 cli.py relance el crawl una sola vez y lo reutilice para ambos
 módulos, en vez de que dalfox repita el crawl por su cuenta.
+
+Recibe un dojohack.web_targets.WebTarget, no un target suelto — ver
+ffuf_scan.py para el porqué (la app puede no estar en http/80/raíz).
 """
 
 import json
@@ -41,11 +44,11 @@ import json
 from .. import subprocess_utils
 
 
-def crawl(target: str) -> str:
-    """Ejecuta katana contra target y devuelve la salida cruda en
-    jsonl (una línea JSON por request). El timeout lo controla
-    dojohack.timeouts.run_module, no esta función."""
-    url = f"http://{target}"
+def crawl(web_target) -> str:
+    """Ejecuta katana contra web_target.base_url y devuelve la salida
+    cruda en jsonl (una línea JSON por request). El timeout lo
+    controla dojohack.timeouts.run_module, no esta función."""
+    url = web_target.base_url
     proc = subprocess_utils.run(
         [
             "katana", "-u", url,
@@ -136,10 +139,10 @@ def parse_forms(raw_jsonl: str) -> list[dict]:
     return forms
 
 
-def run(target: str) -> list[dict]:
+def run(web_target) -> list[dict]:
     """Atajo para uso aislado del módulo (pruebas manuales, etc.):
     crawl() + parse_findings() en un solo paso, igual que el resto de
     módulos del pipeline. cli.py no usa esta función directamente
     porque necesita reutilizar el crawl crudo para dalfox — ver
     parse_endpoints()."""
-    return parse_findings(crawl(target))
+    return parse_findings(crawl(web_target))

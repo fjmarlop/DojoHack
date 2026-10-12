@@ -19,6 +19,11 @@ Se valida que /.git/HEAD responde con el formato real de un ref git
 ("ref: refs/...") y no solo que la ruta devuelve 200 — un servidor
 con fallback genérico (p.ej. una SPA) podría devolver 200 en
 cualquier ruta sin que haya un repo de verdad.
+
+Recibe un dojohack.web_targets.WebTarget (no un target suelto) y mira
+web_target.base_url + "/.git/..." — importante cuando la app está en
+un subdirectorio (ver ffuf_scan.py): el .git expuesto, si lo hay,
+sería el de esa app, no el de la raíz del servidor.
 """
 
 import json
@@ -28,8 +33,8 @@ import urllib.request
 from .. import subprocess_utils
 
 
-def _exposes_git(target: str) -> bool:
-    url = f"http://{target}/.git/HEAD"
+def _exposes_git(web_target) -> bool:
+    url = f"{web_target.base_url}/.git/HEAD"
     try:
         with urllib.request.urlopen(url, timeout=10) as resp:
             if resp.status != 200:
@@ -39,15 +44,15 @@ def _exposes_git(target: str) -> bool:
         return False
 
 
-def run(target: str) -> list[dict]:
+def run(web_target) -> list[dict]:
     """Devuelve una lista de hallazgos, uno por secreto encontrado,
     con el mismo convenio que el resto de módulos: {"name", "detail",
     "severity"}. El timeout lo controla dojohack.timeouts.run_module,
     no esta función."""
-    if not _exposes_git(target):
+    if not _exposes_git(web_target):
         return []
 
-    git_url = f"http://{target}/.git/"
+    git_url = f"{web_target.base_url}/.git/"
     proc = subprocess_utils.run(
         ["trufflehog", "git", git_url, "--json", "--no-update"],
         text=True,
