@@ -289,7 +289,7 @@ def main() -> int:
             "qué cuenta como hallazgo. Necesita ANTHROPIC_API_KEY y el "
             "paquete `anthropic` instalado — si no están, o algo falla, "
             "cae a la versión determinista sin romper el pipeline. "
-            "Apagado por defecto: el pipeline sigue siendo 100% "
+            "Apagado por defecto: el pipeline sigue siendo totalmente "
             "determinista/offline salvo que se pida explícitamente."
         ),
     )
