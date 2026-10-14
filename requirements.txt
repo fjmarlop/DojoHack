@@ -1,1 +1,7 @@
 httpx
+
+# Opcional, solo si se usa --polish (dojohack/ai_redact.py): pulir la
+# redacción del recon_writeup.md con Claude. Si no está instalado o no
+# hay ANTHROPIC_API_KEY, --polish simplemente cae a la versión
+# determinista sin romper el pipeline — no es una dependencia dura.
+# anthropic

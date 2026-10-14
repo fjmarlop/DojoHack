@@ -19,7 +19,7 @@ import json
 import sys
 from pathlib import Path
 
-from . import classifier, preflight, preprocessor, report, route_patterns, vhost_check, vhost_fuzz, web_targets
+from . import ai_redact, classifier, preflight, preprocessor, report, route_patterns, vhost_check, vhost_fuzz, web_targets
 from .modules import (
     arjun_scan,
     dalfox_scan,
@@ -271,10 +271,32 @@ def main() -> int:
             "puertos web que encuentre nmap — ver dojohack.web_targets."
         ),
     )
+    parser.add_argument(
+        "--name", default=None,
+        help=(
+            "Nombre corto de la máquina, para que la carpeta de salida "
+            "coincida con la que use el flujo de writeups (ej. "
+            "notas/<nombre>/ en ~/ctf) en vez de usar target tal cual "
+            "(que puede ser una IP o un hostname largo). Por defecto, "
+            "la carpeta de salida es ./output/<target>/."
+        ),
+    )
+    parser.add_argument(
+        "--polish", action="store_true",
+        help=(
+            "Pedir a Claude que mejore la redacción de recon_writeup.md "
+            "(conectar hallazgos relacionados, variar el tono) sin cambiar "
+            "qué cuenta como hallazgo. Necesita ANTHROPIC_API_KEY y el "
+            "paquete `anthropic` instalado — si no están, o algo falla, "
+            "cae a la versión determinista sin romper el pipeline. "
+            "Apagado por defecto: el pipeline sigue siendo 100% "
+            "determinista/offline salvo que se pida explícitamente."
+        ),
+    )
     args = parser.parse_args()
 
     target = args.target
-    out_dir = Path(args.output) if args.output else Path("output") / target
+    out_dir = Path(args.output) if args.output else Path("output") / (args.name or target)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     findings: list = []
@@ -372,6 +394,21 @@ def main() -> int:
     with open(informe_path, "w", encoding="utf-8") as f:
         f.write(report.render_markdown(target, pistas, contexto))
     log(f"informe: guardado: {informe_path}")
+
+    writeup_content = report.render_writeup(target, pistas, contexto)
+    if args.polish:
+        log("polish: pidiendo a Claude que mejore la redacción del recon...")
+        pulido = ai_redact.polish(target, pistas, contexto)
+        if pulido:
+            writeup_content = pulido
+            log("polish: hecho")
+        else:
+            log("polish: no disponible (sin API key, sin paquete `anthropic`, sin red, o error) — se usa la redacción determinista")
+
+    writeup_path = out_dir / "recon_writeup.md"
+    with open(writeup_path, "w", encoding="utf-8") as f:
+        f.write(writeup_content)
+    log(f"recon para writeup: guardado: {writeup_path}")
 
     print(report.render_terminal(target, pistas, contexto))
 

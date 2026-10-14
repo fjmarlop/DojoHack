@@ -47,8 +47,14 @@ en más CTFs.
 ## Uso
 
 ```
-python -m dojohack.cli <target> [--base-path /subdir]
+python -m dojohack.cli <target> [--base-path /subdir] [--name nombre-maquina]
 ```
+
+`--name` fija el nombre de la carpeta de salida (`output/<name>/` en
+vez de `output/<target>/`) — para que coincida con el nombre que uses
+en tu flujo de writeups aparte (`notas/<nombre-máquina>/` en `~/ctf`),
+cuando `target` es una IP o un hostname largo distinto del nombre de
+la máquina.
 
 El target web real no siempre está en `http://target/` puerto 80: si
 nmap encuentra varios puertos http(s), el pipeline los escanea todos;
@@ -65,6 +71,11 @@ Guarda en `output/<target>/`:
 - `pistas.json` — pistas ya redactadas + contexto de reconocimiento
 - `informe.md` — el mismo contenido que se imprime en terminal, listo
   para caer en un vault de Obsidian
+- `recon_writeup.md` — el mismo contenido repartido en
+  "Reconocimiento"/"Enumeración web", listo para pegar como "toma
+  nota" en el flujo de writeups aparte de `~/ctf` (ver su CLAUDE.md) —
+  DojoHack nunca escribe directamente en esas notas, solo deja el
+  contenido listo para que Paco decida qué pegar
 
 ## Requisitos
 
