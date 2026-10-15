@@ -1,0 +1,21 @@
+[project]
+name = "dojohack"
+version = "0.1.0"
+description = "Reconocimiento para practicar CTF — pistas, nunca soluciones."
+requires-python = ">=3.10"
+dependencies = [
+    "httpx",
+]
+
+[project.optional-dependencies]
+polish = ["anthropic"]
+
+[project.scripts]
+dojohack = "dojohack.cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["dojohack", "dojohack.modules", "dojohack.probes"]

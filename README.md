@@ -44,10 +44,25 @@ apareciendo en más labs, considerar un token de wpscan.com si hace
 falta cruzar contra CVEs conocidos, y lo que surja al usarlo de verdad
 en más CTFs.
 
+## Instalación
+
+```
+cd DojoHack
+pip install -e . --break-system-packages   # editable: los cambios en los .py se ven sin reinstalar
+pip install -e .[polish] --break-system-packages   # si además quieres --polish (necesita anthropic)
+```
+
+Deja `dojohack` como comando normal en el PATH (vía el entry point de
+`pyproject.toml`), invocable desde cualquier carpeta — la carpeta de
+salida sigue ancládose a la raíz del proyecto, no a donde se lance el
+comando (ver `dojohack/cli.py`, `_PROJECT_ROOT`). Sin instalar,
+`python -m dojohack.cli <target>` sigue funcionando igual, lanzado
+desde la raíz del repo.
+
 ## Uso
 
 ```
-python -m dojohack.cli <target> [--base-path /subdir] [--name nombre-maquina]
+dojohack <target> [--base-path /subdir] [--name nombre-maquina] [--polish]
 ```
 
 `--name` fija el nombre de la carpeta de salida (`output/<name>/` en
@@ -55,6 +70,13 @@ vez de `output/<target>/`) — para que coincida con el nombre que uses
 en tu flujo de writeups aparte (`notas/<nombre-máquina>/` en `~/ctf`),
 cuando `target` es una IP o un hostname largo distinto del nombre de
 la máquina.
+
+`--polish` pide a Claude que mejore la redacción de `recon_writeup.md`
+(necesita `ANTHROPIC_API_KEY` con saldo) — apagado por defecto, cae
+solo a la versión determinista si algo falla. Si quien lanza
+`dojohack` es una sesión de Claude Code, no hace falta `--polish`: esa
+misma sesión puede pulir `recon_writeup.md` directamente, sin gastar
+nada aparte.
 
 El target web real no siempre está en `http://target/` puerto 80: si
 nmap encuentra varios puertos http(s), el pipeline los escanea todos;
@@ -65,7 +87,7 @@ IIS placeholder), el pipeline avisa — puede que haga falta el hostname
 real en vez de la IP (ver `dojohack/web_targets.py` y
 `dojohack/vhost_check.py`).
 
-Guarda en `output/<target>/`:
+Guarda en `<raíz del proyecto>/output/<target o name>/`:
 - `findings.json` — hallazgos crudos de todos los módulos/sondas
 - `preprocessed.json` — agrupados + confianza calculada
 - `pistas.json` — pistas ya redactadas + contexto de reconocimiento

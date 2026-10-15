@@ -2,7 +2,8 @@
 DojoHack — asistente de pistas para practicar CTF.
 
 Uso:
-    python -m dojohack.cli <target> [--base-path /subdir]
+    dojohack <target> [--base-path /subdir] [--name nombre] [--polish]
+    (o, sin instalar vía pip: python -m dojohack.cli <target> ...)
 
 El pipeline corre nmap/nuclei una vez contra el host, y el resto de
 módulos (ffuf/katana/dalfox/trufflehog/vhost_check + las sondas
@@ -12,12 +13,21 @@ pero puede ser más de uno si nmap ve varios puertos http(s), o uno
 distinto si --base-path apunta a un subdirectorio (ver web_targets.py:
 visto de primera mano con casapaco.thl, detrás de vhosting, y con
 192.168.72.134, con la app real en /wordpress en vez de la raíz).
+
+La carpeta de salida por defecto (./output/<target-o-name>/) se ancla
+a la raíz del proyecto (_PROJECT_ROOT), no al directorio desde donde
+se invoque — para que `dojohack <target>` deje siempre los ficheros en
+el mismo sitio aunque se lance como comando instalado (pip install -e
+.) desde cualquier carpeta, en vez de depender de haber hecho cd a
+este repo primero.
 """
 
 import argparse
 import json
 import sys
 from pathlib import Path
+
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 from . import ai_redact, classifier, preflight, preprocessor, report, route_patterns, vhost_check, vhost_fuzz, web_targets
 from .modules import (
@@ -261,7 +271,7 @@ def main() -> int:
     parser.add_argument("target", help="IP o dominio del reto")
     parser.add_argument(
         "-o", "--output", default=None,
-        help="Carpeta de salida (por defecto: ./output/<target>/)",
+        help="Carpeta de salida (por defecto: <raíz del proyecto>/output/<target>/)",
     )
     parser.add_argument(
         "--base-path", default=None,
@@ -278,7 +288,7 @@ def main() -> int:
             "coincida con la que use el flujo de writeups (ej. "
             "notas/<nombre>/ en ~/ctf) en vez de usar target tal cual "
             "(que puede ser una IP o un hostname largo). Por defecto, "
-            "la carpeta de salida es ./output/<target>/."
+            "la carpeta de salida es <raíz del proyecto>/output/<target>/."
         ),
     )
     parser.add_argument(
@@ -296,7 +306,7 @@ def main() -> int:
     args = parser.parse_args()
 
     target = args.target
-    out_dir = Path(args.output) if args.output else Path("output") / (args.name or target)
+    out_dir = Path(args.output) if args.output else _PROJECT_ROOT / "output" / (args.name or target)
     out_dir.mkdir(parents=True, exist_ok=True)
 
     findings: list = []
