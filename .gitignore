@@ -5,3 +5,5 @@ venv/
 output/
 .idea/
 .vscode/
+*.egg-info/
+build/
