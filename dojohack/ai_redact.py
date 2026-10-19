@@ -10,12 +10,31 @@ categoría de herramienta, y variar el tono en vez de repetir
 plantillas fijas (ver conversación con Paco, 2026-10-15/16, sobre
 redacción del informe).
 
+Usa el CLI local `claude -p` (headless), no la API de pago de
+Anthropic: en la máquina donde corre dojohack siempre hay una sesión
+de Claude Code disponible (ver conversación con Paco, 2026-10-20), así
+que no tiene sentido depender de un ANTHROPIC_API_KEY con saldo
+propio y aparte. Se invoca con `--tools ""` (sin acceso a
+Bash/Edit/Read ni a ninguna otra herramienta — esto es una reescritura
+de texto, no una tarea agéntica) y `--permission-prompts none` (por si
+algo intentara pedir permiso igualmente, se deniega solo en vez de
+colgarse esperando una respuesta que nunca llega en modo headless).
+
+Importante: se lanza con ANTHROPIC_API_KEY explícitamente quitada del
+entorno del subproceso. Si esa variable está exportada en el shell
+(como pasó en la VM: quedó puesta de cuando se probó --polish contra
+la API, con saldo a cero), `claude` la prioriza sobre el login de
+suscripción y el --polish entero falla por "Credit balance is too
+low" — justo el problema que este cambio pretende evitar. No basta
+con pedirle a Paco que la quite de ~/.zshrc; aquí se fuerza para que
+no dependa de la higiene del shell en cada máquina donde corra esto.
+
 Opt-in (--polish, apagado por defecto): el pipeline sigue siendo
 100% determinista/offline salvo que se pida explícitamente. Si algo
-falla (sin ANTHROPIC_API_KEY, sin el paquete `anthropic` instalado,
-sin red, error de la API, respuesta con formato inesperado...) esto
-devuelve None en vez de levantar — cli.py cae entonces a
-report.render_writeup() tal cual, nunca rompe el pipeline por esto.
+falla (sin el binario `claude` en PATH, timeout, error, respuesta con
+formato inesperado...) esto devuelve None en vez de levantar —
+cli.py cae entonces a report.render_writeup() tal cual, nunca rompe
+el pipeline por esto.
 
 Cubre ÚNICAMENTE lo mismo que report.render_writeup(): Reconocimiento
 y Enumeración web. Nunca Explotación/Foothold/Escalada de
@@ -25,7 +44,7 @@ writeups aparte (~/ctf/CLAUDE.md, repo distinto de este).
 
 import os
 
-from . import report
+from . import report, subprocess_utils
 
 MODEL = "claude-haiku-5-5"  # tarea de redacción, no de razonamiento: el modelo mas barato/rapido sobra
 
@@ -41,33 +60,37 @@ Reglas estrictas, sin excepción:
 
 
 def polish(target: str, pistas: list[dict], contexto: list[str]) -> str | None:
-    """Pide a Claude que reescriba report.render_writeup() en mejor
-    prosa, sin cambiar qué cuenta como hallazgo. Devuelve el markdown
-    reescrito, o None si no se puede por cualquier motivo (nunca
-    levanta) — para que cli.py siempre tenga la versión determinista
-    como alternativa segura."""
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        return None
-
-    try:
-        import anthropic
-    except ImportError:
-        return None
-
+    """Pide a Claude (CLI local, sin herramientas) que reescriba
+    report.render_writeup() en mejor prosa, sin cambiar qué cuenta
+    como hallazgo. Devuelve el markdown reescrito, o None si no se
+    puede por cualquier motivo (nunca levanta) — para que cli.py
+    siempre tenga la versión determinista como alternativa segura."""
     base = report.render_writeup(target, pistas, contexto)
 
+    env = os.environ.copy()
+    env.pop("ANTHROPIC_API_KEY", None)  # forzar login por suscripción, no API de pago (ver docstring)
+
     try:
-        client = anthropic.Anthropic()
-        resp = client.messages.create(
-            model=MODEL,
-            max_tokens=4096,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": f"Target: {target}\n\n{base}"}],
+        proc = subprocess_utils.run(
+            [
+                "claude", "-p", f"Target: {target}\n\n{base}",
+                "--system-prompt", SYSTEM_PROMPT,
+                "--model", MODEL,
+                "--tools", "",
+                "--permission-prompts", "none",
+                "--no-session-persistence",
+                "--output-format", "text",
+            ],
+            text=True,
+            env=env,
         )
-        texto = "".join(block.text for block in resp.content if block.type == "text").strip()
     except Exception:
         return None
 
+    if proc.returncode != 0:
+        return None
+
+    texto = proc.stdout.strip()
     if not texto.startswith("## Reconocimiento"):
         return None  # formato inesperado: mejor caer a la version determinista que arriesgar un writeup roto
 

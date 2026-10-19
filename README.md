@@ -49,7 +49,6 @@ en más CTFs.
 ```
 cd DojoHack
 pip install -e . --break-system-packages   # editable: los cambios en los .py se ven sin reinstalar
-pip install -e .[polish] --break-system-packages   # si además quieres --polish (necesita anthropic)
 ```
 
 Deja `dojohack` como comando normal en el PATH (vía el entry point de
@@ -71,12 +70,14 @@ en tu flujo de writeups aparte (`notas/<nombre-máquina>/` en `~/ctf`),
 cuando `target` es una IP o un hostname largo distinto del nombre de
 la máquina.
 
-`--polish` pide a Claude que mejore la redacción de `recon_writeup.md`
-(necesita `ANTHROPIC_API_KEY` con saldo) — apagado por defecto, cae
-solo a la versión determinista si algo falla. Si quien lanza
-`dojohack` es una sesión de Claude Code, no hace falta `--polish`: esa
-misma sesión puede pulir `recon_writeup.md` directamente, sin gastar
-nada aparte.
+`--polish` pide al CLI local de Claude Code (`claude -p`, sin API de
+pago ni `ANTHROPIC_API_KEY` — necesita el comando `claude` en PATH y
+sesión iniciada en la máquina) que mejore la redacción de
+`recon_writeup.md` — apagado por defecto, cae solo a la versión
+determinista si algo falla (`claude` no está en PATH, timeout, error).
+Si quien lanza `dojohack` es ya una sesión de Claude Code interactiva,
+tampoco hace falta `--polish`: esa misma sesión puede pulir
+`recon_writeup.md` directamente, a mano.
 
 El target web real no siempre está en `http://target/` puerto 80: si
 nmap encuentra varios puertos http(s), el pipeline los escanea todos;

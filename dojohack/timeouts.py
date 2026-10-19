@@ -37,6 +37,7 @@ MODULE_TIMEOUTS = {
     "enum4linux": 180,
     "arjun": 600,  # una invocacion por URL de katana, cada una puede tardar >1min con la wordlist grande por defecto
     "testssl": 300,
+    "polish": 300,  # claude -p sobre el recon ya redactado, nada de razonamiento largo
 }
 
 _HAS_ALARM = hasattr(signal, "SIGALRM")

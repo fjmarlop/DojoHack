@@ -18,6 +18,15 @@ el tiempo según lo que se vaya viendo en los labs.
 
 import re
 
+# Caso aparte del resto de la tabla: no sugiere técnicas genéricas por
+# el nombre de la ruta, sino que extrae un dato concreto (el nicename
+# de autor de WordPress, que casi siempre coincide con un username
+# real del sistema) directamente de la URL — visto de primera mano en
+# un lab real, donde ese username no salía por ningún otro módulo
+# porque wpscan no llegó a enumerarlo y ARJUN (que sí tocó la misma
+# URL) nunca se convierte en pista por sí mismo (ver classifier.py).
+_AUTHOR_RE = re.compile(r"/author/([^/?#]+)/?", re.I)
+
 # (patrón regex sobre la ruta/nombre completo, técnicas a sugerir)
 PATTERNS: list[tuple[re.Pattern, list[str]]] = [
     (
@@ -87,7 +96,9 @@ def scan_paths(paths: list[str]) -> list[dict]:
     algún patrón conocido), con el mismo convenio que el resto de
     módulos: {"name", "detail", "severity"}. Nunca confirma nada —
     solo apunta técnicas a explorar, igual de dubitativo que el resto
-    de pistas del proyecto."""
+    de pistas del proyecto. Una misma ruta puede generar más de un
+    hallazgo (ej. una página de autor de WordPress dispara tanto el
+    aviso de username filtrado como el genérico de wp-content)."""
     findings = []
     seen = set()
     for path in paths:
@@ -95,15 +106,28 @@ def scan_paths(paths: list[str]) -> list[dict]:
             continue
         seen.add(path)
 
+        m = _AUTHOR_RE.search(path)
+        if m:
+            usuario = m.group(1)
+            findings.append({
+                "name": "RUTA_SOSPECHOSA",
+                "detail": (
+                    f"{path} — página de archivo de autor de WordPress: suele "
+                    f"filtrar un username real del sistema ('{usuario}'), vale "
+                    f"la pena anotarlo para fuerza bruta / credenciales por "
+                    f"defecto en wp-login.php."
+                ),
+                "severity": "info",
+            })
+
         tecnicas = match(path)
-        if not tecnicas:
-            continue
-        findings.append({
-            "name": "RUTA_SOSPECHOSA",
-            "detail": (
-                f"{path} — por el nombre, podría valer la pena probar: "
-                f"{', '.join(tecnicas)}."
-            ),
-            "severity": "info",
-        })
+        if tecnicas:
+            findings.append({
+                "name": "RUTA_SOSPECHOSA",
+                "detail": (
+                    f"{path} — por el nombre, podría valer la pena probar: "
+                    f"{', '.join(tecnicas)}."
+                ),
+                "severity": "info",
+            })
     return findings

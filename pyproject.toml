@@ -7,9 +7,6 @@ dependencies = [
     "httpx",
 ]
 
-[project.optional-dependencies]
-polish = ["anthropic"]
-
 [project.scripts]
 dojohack = "dojohack.cli:main"
 

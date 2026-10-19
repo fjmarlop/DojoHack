@@ -294,13 +294,14 @@ def main() -> int:
     parser.add_argument(
         "--polish", action="store_true",
         help=(
-            "Pedir a Claude que mejore la redacción de recon_writeup.md "
-            "(conectar hallazgos relacionados, variar el tono) sin cambiar "
-            "qué cuenta como hallazgo. Necesita ANTHROPIC_API_KEY y el "
-            "paquete `anthropic` instalado — si no están, o algo falla, "
-            "cae a la versión determinista sin romper el pipeline. "
-            "Apagado por defecto: el pipeline sigue siendo totalmente "
-            "determinista/offline salvo que se pida explícitamente."
+            "Pedir a Claude (CLI local, `claude -p`, sin API de pago) que "
+            "mejore la redacción de recon_writeup.md (conectar hallazgos "
+            "relacionados, variar el tono) sin cambiar qué cuenta como "
+            "hallazgo. Necesita el comando `claude` en PATH — si no está, "
+            "o algo falla, cae a la versión determinista sin romper el "
+            "pipeline. Apagado por defecto: el pipeline sigue siendo "
+            "totalmente determinista/offline salvo que se pida "
+            "explícitamente."
         ),
     )
     args = parser.parse_args()
@@ -407,13 +408,16 @@ def main() -> int:
 
     writeup_content = report.render_writeup(target, pistas, contexto)
     if args.polish:
-        log("polish: pidiendo a Claude que mejore la redacción del recon...")
-        pulido = ai_redact.polish(target, pistas, contexto)
+        log("polish: pidiendo a Claude (CLI local) que mejore la redacción del recon...")
+        pulido = run_module(
+            ai_redact.polish, target, pistas, contexto,
+            timeout=MODULE_TIMEOUTS["polish"], label="polish", on_error=log,
+        )
         if pulido:
             writeup_content = pulido
             log("polish: hecho")
         else:
-            log("polish: no disponible (sin API key, sin paquete `anthropic`, sin red, o error) — se usa la redacción determinista")
+            log("polish: no disponible (sin el comando `claude` en PATH, timeout, o error) — se usa la redacción determinista")
 
     writeup_path = out_dir / "recon_writeup.md"
     with open(writeup_path, "w", encoding="utf-8") as f:
