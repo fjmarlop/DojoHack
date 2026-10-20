@@ -23,6 +23,8 @@ cobertura real.
 
 import httpx
 
+from . import concurrency
+
 TIMEOUT = 10
 
 # (nombre, payload, marcador esperado en la respuesta)
@@ -93,11 +95,9 @@ def run(injection_points: list[dict]) -> list[dict]:
     """Devuelve una lista de hallazgos (uno por punto de inyección
     donde se detecta path traversal), con el mismo convenio que el
     resto de módulos: {"name", "detail", "severity"}. El timeout lo
-    controla dojohack.timeouts.run_module, no esta función."""
-    findings = []
+    controla dojohack.timeouts.run_module, no esta función. Los puntos
+    se prueban en paralelo (ver concurrency.py) — sin esto, una app
+    con cientos de puntos de inyección se come el timeout del módulo
+    sin necesidad."""
     with httpx.Client(follow_redirects=True) as client:
-        for point in injection_points:
-            result = _test_point(client, point)
-            if result:
-                findings.append(result)
-    return findings
+        return concurrency.run_points(_test_point, client, injection_points)

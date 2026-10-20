@@ -142,7 +142,7 @@ def fuzz(web_target, wordlist: str = DEFAULT_WORDLIST) -> list[dict]:
         proc = subprocess_utils.run(
             [
                 "ffuf", "-u", url, "-w", wordlist,
-                "-mc", "all", "-fc", "404",
+                "-mc", "all", "-fc", "404", "-t", "100",
                 "-o", out_path, "-of", "json", "-s",
             ],
             text=True,

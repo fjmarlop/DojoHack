@@ -34,8 +34,11 @@ import socket
 import string
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import httpx
+
+from . import concurrency
 
 TIMEOUT = 10
 OOB_WAIT_SECONDS = 3
@@ -111,11 +114,44 @@ def _finding(point: dict, evidencia: str) -> dict:
     }
 
 
+def _probe_point(client: httpx.Client, my_ip: str | None, collector_port: int, item: tuple[int, dict]):
+    """Primera fase para un punto: prueba lectura de fichero interno y,
+    si no se confirma por ahí, deja un payload OOB con token único.
+    Devuelve (finding_confirmado_o_None, (token, point)_pendiente_o_None)
+    — nunca los dos a la vez. Sin estado compartido con otros puntos,
+    así que es seguro llamarla en paralelo (ver run())."""
+    idx, point = item
+    try:
+        resp = _send(client, point, FILE_READ_PAYLOAD)
+    except httpx.HTTPError:
+        resp = None
+    if resp is not None and FILE_READ_MARKER in resp.text:
+        return _finding(point, "lectura de fichero interno (file:///etc/passwd)"), None
+
+    if my_ip is None:
+        return None, None
+
+    token = f"{idx}-{''.join(random.choices(string.ascii_lowercase + string.digits, k=8))}"
+    payload = f"http://{my_ip}:{collector_port}/{token}"
+    try:
+        _send(client, point, payload)
+    except httpx.HTTPError:
+        return None, None
+    return None, (token, point)
+
+
 def run(injection_points: list[dict], target_host: str) -> list[dict]:
     """Devuelve una lista de hallazgos (uno por punto de inyección
     donde se detecta SSRF), con el mismo convenio que el resto de
     módulos: {"name", "detail", "severity"}. El timeout global lo
-    controla dojohack.timeouts.run_module, no esta función."""
+    controla dojohack.timeouts.run_module, no esta función.
+
+    La primera fase (lectura de fichero + registro de payload OOB) se
+    prueba en paralelo igual que el resto de sondas (ver
+    concurrency.py) — cada punto es independiente, _probe_point() no
+    toca estado compartido. La segunda fase (esperar y comprobar qué
+    tokens OOB llegaron) sigue siendo una única espera al final, no
+    por punto, así que ya era barata y no hacía falta tocarla."""
     findings: list[dict] = []
     if not injection_points:
         return findings
@@ -128,28 +164,16 @@ def run(injection_points: list[dict], target_host: str) -> list[dict]:
             my_ip = None
 
         pending_oob: dict[str, dict] = {}
-        confirmed_ids: set[int] = set()
 
         with httpx.Client(follow_redirects=True) as client:
-            for idx, point in enumerate(injection_points):
-                try:
-                    resp = _send(client, point, FILE_READ_PAYLOAD)
-                except httpx.HTTPError:
-                    resp = None
-                if resp is not None and FILE_READ_MARKER in resp.text:
-                    findings.append(_finding(point, "lectura de fichero interno (file:///etc/passwd)"))
-                    confirmed_ids.add(idx)
-                    continue  # ya confirmado por esta vía, no hace falta la de OOB
-
-                if my_ip is None:
-                    continue
-                token = f"{idx}-{''.join(random.choices(string.ascii_lowercase + string.digits, k=8))}"
-                payload = f"http://{my_ip}:{collector.port}/{token}"
-                try:
-                    _send(client, point, payload)
-                except httpx.HTTPError:
-                    continue
-                pending_oob[token] = point
+            with ThreadPoolExecutor(max_workers=concurrency.MAX_WORKERS) as pool:
+                probe = lambda item: _probe_point(client, my_ip, collector.port, item)
+                for finding, pending in pool.map(probe, enumerate(injection_points)):
+                    if finding:
+                        findings.append(finding)
+                    if pending:
+                        token, point = pending
+                        pending_oob[token] = point
 
             if pending_oob:
                 time.sleep(OOB_WAIT_SECONDS)

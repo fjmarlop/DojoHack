@@ -104,7 +104,7 @@ def fuzz(web_target, wordlist: str = DEFAULT_WORDLIST) -> list[str]:
         proc = subprocess_utils.run(
             [
                 "ffuf", "-u", f"{base}/", "-H", "Host: FUZZ", "-w", wordlist,
-                "-fs", str(baseline_size), "-fc", "400", "-mc", "all",
+                "-fs", str(baseline_size), "-fc", "400", "-mc", "all", "-t", "100",
                 "-o", out_path, "-of", "json", "-s",
             ],
             text=True,

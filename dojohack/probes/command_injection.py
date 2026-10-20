@@ -38,6 +38,8 @@ import time
 
 import httpx
 
+from . import concurrency
+
 TIMEOUT = 12
 SLEEP_SECONDS = 5
 TIME_THRESHOLD = 4  # margen por debajo de SLEEP_SECONDS, para tolerar jitter de red
@@ -128,11 +130,12 @@ def run(injection_points: list[dict]) -> list[dict]:
     """Devuelve una lista de hallazgos (uno por punto de inyección
     donde se detecta inyección de comandos), con el mismo convenio que
     el resto de módulos: {"name", "detail", "severity"}. El timeout lo
-    controla dojohack.timeouts.run_module, no esta función."""
-    findings = []
+    controla dojohack.timeouts.run_module, no esta función. Los puntos
+    se prueban en paralelo con un tope moderado de hilos (ver
+    concurrency.py) — suficiente para no comerse el timeout del
+    módulo con cientos de puntos (lo que pasaba antes: 235 puntos ×
+    hasta 10 peticiones secuenciales cada uno superaban los 300s sin
+    que el target fuera lento en sí), sin tantos a la vez como para
+    meter ruido en la detección ciega por tiempo (TIME_PAYLOADS)."""
     with httpx.Client(follow_redirects=True) as client:
-        for point in injection_points:
-            result = _test_point(client, point)
-            if result:
-                findings.append(result)
-    return findings
+        return concurrency.run_points(_test_point, client, injection_points)
