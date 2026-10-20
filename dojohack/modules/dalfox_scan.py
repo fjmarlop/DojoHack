@@ -19,6 +19,13 @@ de katana ya vienen completas, así que no necesitan web_target.
 Usa -f json (un único objeto JSON con todo el scan) en vez de la
 salida de consola — mismo motivo que el resto: formato estable entre
 versiones.
+
+--workers/--max-concurrent-targets subidos de 50 (su propio defecto,
+ya no tan bajo) a 100, y --skip-waf-probe para no gastar peticiones
+detectando un WAF que no existe en un lab de práctica — sin esto,
+contra una app WordPress real con decenas de URLs y cientos de
+parámetros (ARJUN) de por medio, dalfox se comía el timeout del
+módulo (ver conversación con Paco, 2026-10-20).
 """
 
 import json
@@ -41,7 +48,11 @@ def run(web_target, urls: list[str] | None = None) -> list[dict]:
 
     try:
         proc = subprocess_utils.run(
-            ["dalfox", "scan", urls_path, "-f", "json", "--silence"],
+            [
+                "dalfox", "scan", urls_path, "-f", "json", "--silence",
+                "--workers", "100", "--max-concurrent-targets", "100",
+                "--skip-waf-probe",
+            ],
             text=True,
         )
         if proc.returncode != 0 and not proc.stdout.strip():

@@ -17,6 +17,10 @@ coherente con "arsenal completo, sin recortar" (ver CLAUDE.md): un
 plugin sin vulnerabilidad conocida HOY sigue siendo superficie de
 ataque real y dato de reconocimiento (ver el campo "outdated").
 
+-t 50 (su defecto es 5 — pensado para no llamar la atención en un
+engagement real; aquí no hay WAF ni SOC que evitar, así que no tiene
+sentido ir tan despacio, ver conversación con Paco, 2026-10-20).
+
 LIMITACIÓN CONOCIDA: sin --api-token (no hay uno de wpscan.com
 configurado en este equipo), wpscan no puede cruzar plugins/temas/
 core contra su base de datos de CVEs — "vulnerabilities" viene vacío
@@ -44,7 +48,7 @@ def run(web_target) -> list[dict]:
     proc = subprocess_utils.run(
         [
             "wpscan", "--url", f"{web_target.base_url}/",
-            "-e", ENUMERATE, "-f", "json", "--no-banner",
+            "-e", ENUMERATE, "-f", "json", "--no-banner", "-t", "50",
         ],
         text=True,
     )
