@@ -3,6 +3,8 @@ DojoHack — asistente de pistas para practicar CTF.
 
 Uso:
     dojohack <target> [--base-path /subdir] [--name nombre] [--polish]
+    dojohack <target> --quick   (diagnóstico rápido de vhost/CMS antes
+                                  del pipeline completo — ver quick_scan.py)
     (o, sin instalar vía pip: python -m dojohack.cli <target> ...)
 
 El pipeline corre nmap/nuclei una vez contra el host, y el resto de
@@ -29,7 +31,7 @@ from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-from . import ai_redact, classifier, php_cve_check, preflight, preprocessor, report, route_patterns, vhost_check, vhost_fuzz, web_targets
+from . import ai_redact, classifier, php_cve_check, preflight, preprocessor, quick_scan, report, route_patterns, vhost_check, vhost_fuzz, web_targets
 from .modules import (
     arjun_scan,
     dalfox_scan,
@@ -315,7 +317,21 @@ def main() -> int:
             "explícitamente."
         ),
     )
+    parser.add_argument(
+        "--quick", action="store_true",
+        help=(
+            "Diagnóstico rápido (segundos, no minutos) y sale: ¿hay vhost "
+            "por nombre? ¿hay un CMS en subdirectorio? Sin nmap ni "
+            "fuzzing con wordlist — para saber los parámetros correctos "
+            "ANTES de lanzar el pipeline completo, en vez de relanzarlo "
+            "2-3 veces. No lanza el resto del pipeline ni toca /etc/hosts."
+        ),
+    )
     args = parser.parse_args()
+
+    if args.quick:
+        quick_scan.run(args.target)
+        return 0
 
     target = args.target
     out_dir = Path(args.output) if args.output else _PROJECT_ROOT / "output" / (args.name or target)

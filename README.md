@@ -42,6 +42,8 @@ contra un lab real:
       clean-room contra el advisory oficial de PHP Group, solo
       fingerprint de versión (sin disparar el bug de memoria de
       verdad, eso ya sería explotación)
+- [x] Modo `--quick` (`quick_scan.py`) — diagnóstico de vhost/CMS en
+      segundos, antes de lanzar el pipeline completo
 
 Próximos pasos (sin hoja de ruta fija todavía): ampliar la tabla de
 patrones de ruta y los redactores de pistas según lo que vaya
@@ -67,7 +69,15 @@ desde la raíz del repo.
 
 ```
 dojohack <target> [--base-path /subdir] [--name nombre-maquina] [--polish]
+dojohack <target> --quick
 ```
+
+`--quick` hace un diagnóstico rápido (segundos, sin nmap ni fuzzing
+con wordlist) de si `target` necesita vhosting por nombre y/o tiene
+el CMS en un subdirectorio, e imprime el comando `dojohack` completo
+recomendado — pensado para no relanzar el pipeline completo 2-3 veces
+cuando el target usa vhosting (ver `quick_scan.py`). No toca
+`/etc/hosts` ni lanza el resto del pipeline.
 
 `--name` fija el nombre de la carpeta de salida (`output/<name>/` en
 vez de `output/<target>/`) — para que coincida con el nombre que uses
