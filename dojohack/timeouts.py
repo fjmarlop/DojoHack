@@ -38,6 +38,7 @@ MODULE_TIMEOUTS = {
     "arjun": 600,  # una invocacion por URL de katana, cada una puede tardar >1min con la wordlist grande por defecto
     "testssl": 300,
     "polish": 300,  # claude -p sobre el recon ya redactado, nada de razonamiento largo
+    "php_cve_check": 60,  # como mucho 2 peticiones (cabecera + egg de créditos)
 }
 
 _HAS_ALARM = hasattr(signal, "SIGALRM")

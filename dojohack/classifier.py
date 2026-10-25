@@ -178,6 +178,22 @@ def _redact_wpscan(grupo: dict) -> str:
     return f"wpscan dejó esta nota de reconocimiento sobre el WordPress: {texto[:200]}."
 
 
+def _redact_php_cve(grupo: dict) -> str:
+    texto = grupo["evidencia"][0]
+    if re.search(r"rama EOL sin parche|anterior al build corregido", texto, re.I):
+        return (
+            f"{texto} — es de las CVE más críticas de este año (RCE, CVSS "
+            f"9.2, hecha pública hace pocos días), pero son bugs internos "
+            f"de memoria sin un disparador seguro de confirmar a ciegas: "
+            f"esto es solo exposición por versión, no prueba de que aquí "
+            f"se pueda explotar de verdad — tocaría investigar con cuidado "
+            f"si por ahí hay algo."
+        )
+    if re.search(r"ya tiene el build corregido", texto, re.I):
+        return f"{texto} — por esta vía en concreto no parece haber nada que explorar."
+    return f"{texto}. Dato de reconocimiento sobre PHP, por si encaja con otra pista."
+
+
 _REDACTORES = {
     "NUCLEI": _redact_nuclei,
     "DALFOX": _redact_dalfox,
@@ -186,6 +202,7 @@ _REDACTORES = {
     "NMAP_SCRIPT": _redact_nmap_script,
     "ENUM4LINUX": _redact_enum4linux,
     "TESTSSL": _redact_testssl,
+    "PHP_CVE_CHECK": _redact_php_cve,
 }
 
 

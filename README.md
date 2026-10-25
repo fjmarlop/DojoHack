@@ -37,6 +37,11 @@ contra un lab real:
 - [x] Preprocessor (agrupación + confianza) — portado de PocketHacker
 - [x] Clasificador de pistas — redacción dubitativa uniforme
 - [x] Informe final en terminal + guardado en `.md`
+- [x] Detector de CVE-2026-109618/109619 ("PHP2Shell", RCE crítico en
+      PHP 7.3–8.5.11, disclosure 2026-10-21) — `php_cve_check.py`,
+      clean-room contra el advisory oficial de PHP Group, solo
+      fingerprint de versión (sin disparar el bug de memoria de
+      verdad, eso ya sería explotación)
 
 Próximos pasos (sin hoja de ruta fija todavía): ampliar la tabla de
 patrones de ruta y los redactores de pistas según lo que vaya

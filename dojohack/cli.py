@@ -29,7 +29,7 @@ from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-from . import ai_redact, classifier, preflight, preprocessor, report, route_patterns, vhost_check, vhost_fuzz, web_targets
+from . import ai_redact, classifier, php_cve_check, preflight, preprocessor, report, route_patterns, vhost_check, vhost_fuzz, web_targets
 from .modules import (
     arjun_scan,
     dalfox_scan,
@@ -87,6 +87,17 @@ def _scan_web_target(wt, missing_tools: set, multiple: bool) -> list[dict]:
                 })
             else:
                 wlog("vhost_fuzz: ningún candidato (puede que no sea vhosting, o que el nombre no esté en la wordlist)")
+
+    wlog("php2shell (CVE-2026-109618/109619): comprobando versión de PHP...")
+    result = run_module(
+        php_cve_check.check, wt,
+        timeout=MODULE_TIMEOUTS["php_cve_check"], label="php_cve_check", on_error=wlog,
+    )
+    if result:
+        findings.extend(result)
+        wlog(f"php2shell: {result[0]['detail']}")
+    else:
+        wlog("php2shell: sin resultado (fallo, timeout, o no se detecta PHP)")
 
     if wt.scheme != "https":
         wlog("testssl: omitido (no es https)")
