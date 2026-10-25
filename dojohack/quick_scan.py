@@ -122,13 +122,19 @@ def run(target: str) -> None:
     hostname_real = wp_hostname and wp_hostname != target and not vhost_check.is_ip(wp_hostname)
 
     if hostname_real:
-        _qlog(f"vhost: sí — hostname real detectado: {wp_hostname} (vía WordPress/wp-json)")
+        _qlog(f"vhost: sí — hostname real detectado: {wp_hostname} (vía WordPress/wp-json, ya en la raíz)")
     elif señales:
         _qlog(f"vhost: probablemente sí — {'; '.join(señales)}, pero no se pudo adivinar el hostname real.")
     else:
         _qlog("vhost: no se detecta nada raro, probar con el target tal cual debería ir bien.")
 
-    subdirs = _probe_subdirs(base_url)
+    # Si wp_hostname salió del propio base_url probado, la raíz YA es
+    # la app real (así se delató el hostname) — sondear subdirectorios
+    # solo daría ruido (ej. un /admin de otra cosa en la misma
+    # máquina) y sugeriría un --base-path contradictorio. Solo tiene
+    # sentido cuando la raíz no es la app real (p.ej. página por
+    # defecto de Apache, como pasaba con academy.thl).
+    subdirs = [] if hostname_real else _probe_subdirs(base_url)
     if subdirs:
         rutas = ", ".join(f"/{s} ({c})" for s, c in subdirs)
         _qlog(f"posible CMS en subdirectorio: {rutas}")
