@@ -35,11 +35,13 @@ from pathlib import Path
 from .. import subprocess_utils
 
 
-def run(web_target, urls: list[str] | None = None) -> list[dict]:
+def run(web_target, urls: list[str] | None = None, timeout: int | None = None) -> list[dict]:
     """Devuelve una lista de hallazgos, uno por XSS detectado, con el
     mismo convenio que el resto de módulos: {"name", "detail",
-    "severity"}. El timeout lo controla dojohack.timeouts.run_module,
-    no esta función."""
+    "severity"}. `timeout` se propaga a subprocess_utils.run() — cli.py
+    lo lanza en paralelo con arjun (ambos solo necesitan katana_urls)
+    vía timeouts.run_threadsafe, que necesita un timeout seguro entre
+    hilos (ver ese módulo)."""
     urls = urls or [f"{web_target.base_url}/"]
 
     with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as tmp:
@@ -54,6 +56,7 @@ def run(web_target, urls: list[str] | None = None) -> list[dict]:
                 "--skip-waf-probe",
             ],
             text=True,
+            timeout=timeout,
         )
         if proc.returncode != 0 and not proc.stdout.strip():
             raise RuntimeError(f"dalfox devolvió código {proc.returncode}: {proc.stderr[:300]}")

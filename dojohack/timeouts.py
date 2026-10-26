@@ -36,7 +36,7 @@ MODULE_TIMEOUTS = {
     "command_injection": 300,
     "vhost_fuzz": 300,
     "enum4linux": 180,
-    "arjun": 600,  # una invocacion por URL de katana, cada una puede tardar >1min con la wordlist grande por defecto
+    "arjun": 45,  # tope POR URL, no presupuesto total -- arjun_scan.discover() las corre en paralelo (ver ese módulo)
     "testssl": 300,
     "polish": 300,  # claude -p sobre el recon ya redactado, nada de razonamiento largo
     "php_cve_check": 60,  # como mucho 2 peticiones (cabecera + egg de créditos)

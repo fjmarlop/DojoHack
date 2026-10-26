@@ -217,37 +217,52 @@ def _scan_web_target(wt, missing_tools: set, multiple: bool) -> list[dict]:
         findings.extend(result)
     wlog(f"patrones de ruta: {len(result)} rutas sospechosas de {len(rutas_descubiertas)} analizadas")
 
-    if "dalfox" in missing_tools:
-        wlog("dalfox: omitido (binario no encontrado)")
-    else:
-        wlog("dalfox: en marcha...")
-        result = run_module(
-            dalfox_scan.run, wt, urls=katana_urls or None,
-            timeout=MODULE_TIMEOUTS["dalfox"], label="dalfox", on_error=wlog,
-        )
-        if result:
-            findings.extend(result)
-            wlog(f"dalfox: hecho — {len(result)} XSS encontrados")
+    # dalfox y arjun tampoco dependen entre sí (ambos solo necesitan
+    # katana_urls, ya calculado arriba) -- mismo motivo que el bloque
+    # de módulos independientes de más arriba para lanzarlos a la vez
+    # en vez de uno tras otro.
+    stage2: dict = {}
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        futures = {}
+
+        if "dalfox" in missing_tools:
+            wlog("dalfox: omitido (binario no encontrado)")
         else:
-            wlog("dalfox: sin resultado (fallo, timeout o nada que reportar)")
+            wlog("dalfox: en marcha...")
+            futures[pool.submit(
+                run_threadsafe, dalfox_scan.run, wt, urls=katana_urls or None,
+                timeout=MODULE_TIMEOUTS["dalfox"], label="dalfox", on_error=wlog,
+            )] = "dalfox"
+
+        if "arjun" in missing_tools:
+            wlog("arjun: omitido (binario no encontrado)")
+        elif not katana_urls:
+            wlog("arjun: omitido (katana no encontró endpoints que probar)")
+        else:
+            wlog(f"arjun: en marcha... ({len(katana_urls)} endpoints a comprobar)")
+            futures[pool.submit(
+                run_threadsafe, arjun_scan.discover, katana_urls,
+                timeout=MODULE_TIMEOUTS["arjun"], label="arjun", on_error=wlog,
+            )] = "arjun"
+
+        for future in as_completed(futures):
+            stage2[futures[future]] = future.result()
+
+    result = stage2.get("dalfox")
+    if result:
+        findings.extend(result)
+        wlog(f"dalfox: hecho — {len(result)} XSS encontrados")
+    elif "dalfox" in stage2:
+        wlog("dalfox: sin resultado (fallo, timeout o nada que reportar)")
 
     arjun_points: list = []
-    if "arjun" in missing_tools:
-        wlog("arjun: omitido (binario no encontrado)")
-    elif not katana_urls:
-        wlog("arjun: omitido (katana no encontró endpoints que probar)")
-    else:
-        wlog(f"arjun: en marcha... ({len(katana_urls)} endpoints a comprobar)")
-        descubiertos = run_module(
-            arjun_scan.discover, katana_urls,
-            timeout=MODULE_TIMEOUTS["arjun"], label="arjun", on_error=wlog,
-        )
-        if descubiertos:
-            findings.extend(arjun_scan.parse_findings(descubiertos))
-            arjun_points = arjun_scan.parse_injection_points(descubiertos)
-            wlog(f"arjun: hecho — {sum(len(p) for p in descubiertos.values())} parámetros ocultos en {len(descubiertos)} endpoint(s)")
-        else:
-            wlog("arjun: sin resultado (fallo, timeout, o ningún parámetro oculto)")
+    descubiertos = stage2.get("arjun")
+    if descubiertos:
+        findings.extend(arjun_scan.parse_findings(descubiertos))
+        arjun_points = arjun_scan.parse_injection_points(descubiertos)
+        wlog(f"arjun: hecho — {sum(len(p) for p in descubiertos.values())} parámetros ocultos en {len(descubiertos)} endpoint(s)")
+    elif "arjun" in stage2:
+        wlog("arjun: sin resultado (fallo, timeout, o ningún parámetro oculto)")
 
     injection_points = probe_common.from_urls(katana_urls) + probe_common.from_forms(katana_forms) + arjun_points
 
