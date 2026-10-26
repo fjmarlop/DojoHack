@@ -26,6 +26,16 @@ detectando un WAF que no existe en un lab de práctica — sin esto,
 contra una app WordPress real con decenas de URLs y cientos de
 parámetros (ARJUN) de por medio, dalfox se comía el timeout del
 módulo (ver conversación con Paco, 2026-10-20).
+
+--max-payloads-per-param 300 (su propio defecto es un tope interno de
+3000 por parámetro): confirmado con --dry-run contra aceituno.thl que
+el grueso de esos 3000 son variantes de bypass de WAF, no payloads
+"normales" distintos — con 12 parámetros reales encontrados (mining
+de dalfox incluido), el total pasaba de 78.000 peticiones estimadas a
+600s de timeout. A 300, el total baja a ~8.400 (una fracción de la
+cobertura exhaustiva, pero esos primeros payloads del catálogo son
+los que de verdad importan sin WAF que esquivar) — ver conversación
+con Paco, 2026-10-26/27.
 """
 
 import json
@@ -53,7 +63,7 @@ def run(web_target, urls: list[str] | None = None, timeout: int | None = None) -
             [
                 "dalfox", "scan", urls_path, "-f", "json", "--silence",
                 "--workers", "100", "--max-concurrent-targets", "100",
-                "--skip-waf-probe",
+                "--skip-waf-probe", "--max-payloads-per-param", "300",
             ],
             text=True,
             timeout=timeout,
