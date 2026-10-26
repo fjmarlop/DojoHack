@@ -111,15 +111,18 @@ def _assess(version: str) -> tuple[str, str] | None:
     )
 
 
-def check(web_target) -> list[dict]:
+def check(web_target, timeout: int = TIMEOUT) -> list[dict]:
     """Hace una petición pasiva (y, si no revela versión, una query
     del 'egg' de créditos de PHP) contra web_target.base_url y
     compara la versión detectada contra los builds corregidos de
     CVE-2026-109618/109619. Un hallazgo como mucho — nada que decir
-    si no hay PHP detrás. El timeout lo controla
-    dojohack.timeouts.run_module, no esta función."""
+    si no hay PHP detrás. `timeout` llega hasta httpx.Client(), que ya
+    es seguro entre hilos por sí mismo (a diferencia de
+    subprocess_utils.run(), aquí no hace falta ningún cambio más para
+    que cli.py pueda lanzar esto en paralelo con otros módulos — ver
+    timeouts.run_threadsafe)."""
     try:
-        with httpx.Client(follow_redirects=True, timeout=TIMEOUT) as client:
+        with httpx.Client(follow_redirects=True, timeout=timeout) as client:
             resp = client.get(web_target.base_url)
             version = _extract_version(resp.headers)
             present = _php_present(resp.headers, resp.text)

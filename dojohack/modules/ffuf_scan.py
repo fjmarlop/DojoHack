@@ -121,15 +121,17 @@ def _is_catchall_hit(result: dict, calibracion: tuple[int, int]) -> bool:
     return abs((length - len(path)) - base0) <= _CALIBRATION_TOLERANCE
 
 
-def fuzz(web_target, wordlist: str = DEFAULT_WORDLIST) -> list[dict]:
+def fuzz(web_target, wordlist: str = DEFAULT_WORDLIST, timeout: int | None = None) -> list[dict]:
     """Ejecuta ffuf contra web_target.base_url y devuelve la lista de
     resultados (uno por ruta que pasó el filtro -fc 404 y no coincide
     con el patrón catch-all calibrado — ver nota arriba), tal cual los
     da su salida -of json. Separado de parse_findings()/parse_urls()
     por el mismo motivo que crawl() en katana_scan.py: la tabla de
     pistas por patrón de ruta (dojohack.route_patterns) reutiliza
-    estas mismas rutas sin tener que relanzar el fuzzing. El timeout
-    lo controla dojohack.timeouts.run_module, no esta función."""
+    estas mismas rutas sin tener que relanzar el fuzzing. `timeout` se
+    propaga a subprocess_utils.run() — cli.py lo lanza en paralelo con
+    otros módulos independientes vía timeouts.run_threadsafe, que
+    necesita un timeout seguro entre hilos (ver ese módulo)."""
     if not Path(wordlist).is_file():
         raise RuntimeError(f"wordlist no encontrada: {wordlist}")
 
@@ -146,6 +148,7 @@ def fuzz(web_target, wordlist: str = DEFAULT_WORDLIST) -> list[dict]:
                 "-o", out_path, "-of", "json", "-s",
             ],
             text=True,
+            timeout=timeout,
         )
         if proc.returncode != 0:
             raise RuntimeError(f"ffuf devolvió código {proc.returncode}: {proc.stderr[:300]}")

@@ -39,10 +39,12 @@ _SEVERITY_MAP = {
 }
 
 
-def run(web_target) -> list[dict]:
+def run(web_target, timeout: int | None = None) -> list[dict]:
     """Devuelve una lista de hallazgos con el mismo convenio que el
-    resto de módulos: {"name", "detail", "severity"}. El timeout lo
-    controla dojohack.timeouts.run_module, no esta función."""
+    resto de módulos: {"name", "detail", "severity"}. `timeout` se
+    propaga a subprocess_utils.run() — cli.py lo lanza en paralelo con
+    otros módulos independientes vía timeouts.run_threadsafe (ver ese
+    módulo para el porqué)."""
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as tmp:
         out_path = Path(tmp.name)
 
@@ -54,6 +56,7 @@ def run(web_target) -> list[dict]:
                 f"{web_target.host}:{web_target.port}",
             ],
             text=True,
+            timeout=timeout,
         )
         if not out_path.is_file() or out_path.stat().st_size == 0:
             if proc.returncode != 0:

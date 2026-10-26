@@ -44,10 +44,12 @@ import json
 from .. import subprocess_utils
 
 
-def crawl(web_target) -> str:
+def crawl(web_target, timeout: int | None = None) -> str:
     """Ejecuta katana contra web_target.base_url y devuelve la salida
-    cruda en jsonl (una línea JSON por request). El timeout lo
-    controla dojohack.timeouts.run_module, no esta función."""
+    cruda en jsonl (una línea JSON por request). `timeout` se propaga
+    a subprocess_utils.run() — cli.py lo lanza en paralelo con otros
+    módulos independientes vía timeouts.run_threadsafe (ver ese
+    módulo para el porqué: signal.SIGALRM no es seguro entre hilos)."""
     url = web_target.base_url
     proc = subprocess_utils.run(
         [
@@ -55,6 +57,7 @@ def crawl(web_target) -> str:
             "-jsonl", "-silent", "-jc", "-kf", "all", "-fx",
         ],
         text=True,
+        timeout=timeout,
     )
     if proc.returncode != 0 and not proc.stdout.strip():
         raise RuntimeError(f"katana devolvió código {proc.returncode}: {proc.stderr[:300]}")

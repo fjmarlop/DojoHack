@@ -44,11 +44,12 @@ def _exposes_git(web_target) -> bool:
         return False
 
 
-def run(web_target) -> list[dict]:
+def run(web_target, timeout: int | None = None) -> list[dict]:
     """Devuelve una lista de hallazgos, uno por secreto encontrado,
     con el mismo convenio que el resto de módulos: {"name", "detail",
-    "severity"}. El timeout lo controla dojohack.timeouts.run_module,
-    no esta función."""
+    "severity"}. `timeout` se propaga a subprocess_utils.run() — cli.py
+    lo lanza en paralelo con otros módulos independientes vía
+    timeouts.run_threadsafe (ver ese módulo para el porqué)."""
     if not _exposes_git(web_target):
         return []
 
@@ -56,6 +57,7 @@ def run(web_target) -> list[dict]:
     proc = subprocess_utils.run(
         ["trufflehog", "git", git_url, "--json", "--no-update"],
         text=True,
+        timeout=timeout,
     )
     if proc.returncode != 0 and not proc.stdout.strip():
         raise RuntimeError(f"trufflehog devolvió código {proc.returncode}: {proc.stderr[:300]}")

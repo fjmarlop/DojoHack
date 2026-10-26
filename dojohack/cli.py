@@ -27,6 +27,7 @@ este repo primero.
 import argparse
 import json
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -47,7 +48,7 @@ from .modules import (
 from .probes import command_injection, sqli
 from .probes import common as probe_common
 from .probes import path_traversal, ssrf, ssti
-from .timeouts import MODULE_TIMEOUTS, run_module
+from .timeouts import MODULE_TIMEOUTS, run_module, run_threadsafe
 
 
 def log(msg: str) -> None:
@@ -90,68 +91,125 @@ def _scan_web_target(wt, missing_tools: set, multiple: bool) -> list[dict]:
             else:
                 wlog("vhost_fuzz: ningún candidato (puede que no sea vhosting, o que el nombre no esté en la wordlist)")
 
-    wlog("php2shell (CVE-2026-109618/109619): comprobando versión de PHP...")
-    result = run_module(
-        php_cve_check.check, wt,
-        timeout=MODULE_TIMEOUTS["php_cve_check"], label="php_cve_check", on_error=wlog,
-    )
+    # Módulos independientes entre sí: ninguno necesita el resultado
+    # de otro, solo wt — se lanzan todos a la vez en vez de uno
+    # detrás de otro. Antes, tres de estos atascándose en su propio
+    # timeout (ffuf + dalfox + wpscan a 600s cada uno) sumaban 30
+    # minutos solo de esperas, contra un target con contenido real de
+    # verdad (ver conversación con Paco, 2026-10-25/26). En paralelo,
+    # el peor caso es el del más lento de los seis, no la suma de
+    # todos. Usan timeouts.run_threadsafe, no run_module: signal.
+    # SIGALRM solo funciona en el hilo principal, así que estos
+    # módulos reciben su propio `timeout` y lo propagan hasta
+    # subprocess_utils.run()/httpx (ver timeouts.py).
+    stage1: dict = {}
+    with ThreadPoolExecutor(max_workers=6) as pool:
+        futures = {}
+
+        futures[pool.submit(
+            run_threadsafe, php_cve_check.check, wt,
+            timeout=MODULE_TIMEOUTS["php_cve_check"], label="php_cve_check", on_error=wlog,
+        )] = "php_cve_check"
+
+        if wt.scheme != "https":
+            wlog("testssl: omitido (no es https)")
+        elif "testssl" in missing_tools:
+            wlog("testssl: omitido (binario no encontrado)")
+        else:
+            wlog("testssl: en marcha...")
+            futures[pool.submit(
+                run_threadsafe, testssl_scan.run, wt,
+                timeout=MODULE_TIMEOUTS["testssl"], label="testssl", on_error=wlog,
+            )] = "testssl"
+
+        if "ffuf" in missing_tools:
+            wlog("ffuf: omitido (binario no encontrado)")
+        else:
+            wlog("ffuf: en marcha...")
+            futures[pool.submit(
+                run_threadsafe, ffuf_scan.fuzz, wt,
+                timeout=MODULE_TIMEOUTS["ffuf"], label="ffuf", on_error=wlog,
+            )] = "ffuf"
+
+        if "katana" in missing_tools:
+            wlog("katana: omitido (binario no encontrado)")
+        else:
+            wlog("katana: en marcha...")
+            futures[pool.submit(
+                run_threadsafe, katana_scan.crawl, wt,
+                timeout=MODULE_TIMEOUTS["katana"], label="katana", on_error=wlog,
+            )] = "katana"
+
+        if "trufflehog" in missing_tools:
+            wlog("trufflehog: omitido (binario no encontrado)")
+        else:
+            wlog("trufflehog: en marcha...")
+            futures[pool.submit(
+                run_threadsafe, trufflehog_scan.run, wt,
+                timeout=MODULE_TIMEOUTS["trufflehog"], label="trufflehog", on_error=wlog,
+            )] = "trufflehog"
+
+        if "wpscan" in missing_tools:
+            wlog("wpscan: omitido (binario no encontrado)")
+        else:
+            wlog("wpscan: en marcha...")
+            futures[pool.submit(
+                run_threadsafe, wpscan_scan.run, wt,
+                timeout=MODULE_TIMEOUTS["wpscan"], label="wpscan", on_error=wlog,
+            )] = "wpscan"
+
+        for future in as_completed(futures):
+            stage1[futures[future]] = future.result()
+
+    result = stage1.get("php_cve_check")
     if result:
         findings.extend(result)
         wlog(f"php2shell: {result[0]['detail']}")
     else:
         wlog("php2shell: sin resultado (fallo, timeout, o no se detecta PHP)")
 
-    if wt.scheme != "https":
-        wlog("testssl: omitido (no es https)")
-    elif "testssl" in missing_tools:
-        wlog("testssl: omitido (binario no encontrado)")
-    else:
-        wlog("testssl: en marcha...")
-        result = run_module(
-            testssl_scan.run, wt,
-            timeout=MODULE_TIMEOUTS["testssl"], label="testssl", on_error=wlog,
-        )
-        if result:
-            findings.extend(result)
-            wlog(f"testssl: hecho — {len(result)} hallazgos")
-        else:
-            wlog("testssl: sin resultado (fallo, timeout, o nada que reportar)")
+    result = stage1.get("testssl")
+    if result:
+        findings.extend(result)
+        wlog(f"testssl: hecho — {len(result)} hallazgos")
+    elif "testssl" in stage1:
+        wlog("testssl: sin resultado (fallo, timeout, o nada que reportar)")
 
     ffuf_urls: list = []
-    if "ffuf" in missing_tools:
-        wlog("ffuf: omitido (binario no encontrado)")
-    else:
-        wlog("ffuf: en marcha...")
-        ffuf_results = run_module(
-            ffuf_scan.fuzz, wt,
-            timeout=MODULE_TIMEOUTS["ffuf"], label="ffuf", on_error=wlog,
-        )
-        if ffuf_results:
-            result = ffuf_scan.parse_findings(ffuf_results)
-            ffuf_urls = ffuf_scan.parse_urls(ffuf_results)
-            findings.extend(result)
-            wlog(f"ffuf: hecho — {len(result)} rutas encontradas")
-        else:
-            wlog("ffuf: sin resultado (fallo, timeout o nada que reportar)")
+    ffuf_results = stage1.get("ffuf")
+    if ffuf_results:
+        result = ffuf_scan.parse_findings(ffuf_results)
+        ffuf_urls = ffuf_scan.parse_urls(ffuf_results)
+        findings.extend(result)
+        wlog(f"ffuf: hecho — {len(result)} rutas encontradas")
+    elif "ffuf" in stage1:
+        wlog("ffuf: sin resultado (fallo, timeout o nada que reportar)")
 
     katana_urls: list = []
     katana_forms: list = []
-    if "katana" in missing_tools:
-        wlog("katana: omitido (binario no encontrado)")
-    else:
-        wlog("katana: en marcha...")
-        raw = run_module(
-            katana_scan.crawl, wt,
-            timeout=MODULE_TIMEOUTS["katana"], label="katana", on_error=wlog,
-        )
-        if raw:
-            result = katana_scan.parse_findings(raw)
-            katana_urls = katana_scan.parse_endpoints(raw)
-            katana_forms = katana_scan.parse_forms(raw)
-            findings.extend(result)
-            wlog(f"katana: hecho — {len(result)} endpoints encontrados")
-        else:
-            wlog("katana: sin resultado (fallo, timeout o nada que reportar)")
+    raw = stage1.get("katana")
+    if raw:
+        result = katana_scan.parse_findings(raw)
+        katana_urls = katana_scan.parse_endpoints(raw)
+        katana_forms = katana_scan.parse_forms(raw)
+        findings.extend(result)
+        wlog(f"katana: hecho — {len(result)} endpoints encontrados")
+    elif "katana" in stage1:
+        wlog("katana: sin resultado (fallo, timeout o nada que reportar)")
+
+    result = stage1.get("trufflehog")
+    if result:
+        findings.extend(result)
+        wlog(f"trufflehog: hecho — {len(result)} secretos encontrados")
+    elif "trufflehog" in stage1:
+        wlog("trufflehog: sin resultado (fallo, timeout, no expone .git, o nada que reportar)")
+
+    result = stage1.get("wpscan")
+    if result:
+        findings.extend(result)
+        wlog(f"wpscan: hecho — {len(result)} hallazgos")
+    elif "wpscan" in stage1:
+        wlog("wpscan: sin resultado (fallo, timeout, no es WordPress, o nada que reportar)")
 
     rutas_descubiertas = ffuf_urls + katana_urls
     result = route_patterns.scan_paths(rutas_descubiertas)
@@ -172,34 +230,6 @@ def _scan_web_target(wt, missing_tools: set, multiple: bool) -> list[dict]:
             wlog(f"dalfox: hecho — {len(result)} XSS encontrados")
         else:
             wlog("dalfox: sin resultado (fallo, timeout o nada que reportar)")
-
-    if "trufflehog" in missing_tools:
-        wlog("trufflehog: omitido (binario no encontrado)")
-    else:
-        wlog("trufflehog: en marcha...")
-        result = run_module(
-            trufflehog_scan.run, wt,
-            timeout=MODULE_TIMEOUTS["trufflehog"], label="trufflehog", on_error=wlog,
-        )
-        if result:
-            findings.extend(result)
-            wlog(f"trufflehog: hecho — {len(result)} secretos encontrados")
-        else:
-            wlog("trufflehog: sin resultado (fallo, timeout, no expone .git, o nada que reportar)")
-
-    if "wpscan" in missing_tools:
-        wlog("wpscan: omitido (binario no encontrado)")
-    else:
-        wlog("wpscan: en marcha...")
-        result = run_module(
-            wpscan_scan.run, wt,
-            timeout=MODULE_TIMEOUTS["wpscan"], label="wpscan", on_error=wlog,
-        )
-        if result:
-            findings.extend(result)
-            wlog(f"wpscan: hecho — {len(result)} hallazgos")
-        else:
-            wlog("wpscan: sin resultado (fallo, timeout, no es WordPress, o nada que reportar)")
 
     arjun_points: list = []
     if "arjun" in missing_tools:

@@ -41,16 +41,19 @@ from .. import subprocess_utils
 ENUMERATE = "ap,at,tt,cb,dbe,bf,u,m"
 
 
-def run(web_target) -> list[dict]:
+def run(web_target, timeout: int | None = None) -> list[dict]:
     """Devuelve una lista de hallazgos con el mismo convenio que el
-    resto de módulos: {"name", "detail", "severity"}. El timeout lo
-    controla dojohack.timeouts.run_module, no esta función."""
+    resto de módulos: {"name", "detail", "severity"}. `timeout` se
+    propaga a subprocess_utils.run() — cli.py lo lanza en paralelo con
+    otros módulos independientes vía timeouts.run_threadsafe (ver ese
+    módulo para el porqué)."""
     proc = subprocess_utils.run(
         [
             "wpscan", "--url", f"{web_target.base_url}/",
             "-e", ENUMERATE, "-f", "json", "--no-banner", "-t", "50",
         ],
         text=True,
+        timeout=timeout,
     )
     # wpscan devuelve códigos de salida distintos según lo que
     # encuentre (p.ej. vulnerabilidades) — no es señal de fallo real

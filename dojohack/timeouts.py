@@ -17,6 +17,7 @@ log del pipeline.
 """
 
 import signal
+import subprocess
 import sys
 from contextlib import contextmanager
 
@@ -88,6 +89,33 @@ def run_module(func, *args, timeout: int, label: str, on_error=None, **kwargs):
     except ModuleTimeoutError as e:
         if on_error:
             on_error(f"⚠️ {e} — módulo omitido, se continúa con el resto del pipeline.")
+        return None
+    except Exception as e:
+        if on_error:
+            on_error(f"⚠️ Módulo '{label}' falló ({type(e).__name__}: {e}) — se omite.")
+        return None
+
+
+def run_threadsafe(func, *args, timeout: int, label: str, on_error=None, **kwargs):
+    """Mismo contrato que run_module (mismos mensajes de error, mismo
+    "devuelve None en vez de abortar"), pero SIN signal.SIGALRM —
+    pensado para módulos lanzados desde un hilo que no es el
+    principal (ver cli.py: módulos independientes corridos en
+    paralelo con ThreadPoolExecutor). signal.signal()/alarm() solo
+    funcionan en el hilo principal del intérprete, así que dos
+    módulos con timeout propio por SIGALRM lanzados a la vez en hilos
+    distintos se pisarían el uno al otro (un único reloj de alarma
+    para todo el proceso).
+
+    En vez de eso, func debe aceptar su propio kwarg `timeout` y
+    propagarlo hasta subprocess_utils.run(..., timeout=timeout) —
+    subprocess.Popen.communicate(timeout=...) SÍ es seguro entre
+    hilos, al no depender de señales."""
+    try:
+        return func(*args, timeout=timeout, **kwargs)
+    except subprocess.TimeoutExpired:
+        if on_error:
+            on_error(f"⚠️ Módulo '{label}' superó su tope de {timeout}s — módulo omitido, se continúa con el resto del pipeline.")
         return None
     except Exception as e:
         if on_error:

@@ -15,21 +15,30 @@ nmap+nuclei) esto pesa más que al principio.
 
 Todos los módulos de dojohack.modules deberían llamar a esto en vez de
 subprocess.run() directamente.
+
+`timeout` (opcional) se pasa a communicate(), no a Popen() — es el
+mismo mecanismo de siempre (subprocess.TimeoutExpired, no señales), y
+por eso SÍ funciona lanzado desde un hilo que no es el principal, a
+diferencia de dojohack.timeouts.run_module (signal.SIGALRM, solo vale
+en el hilo principal). Pensado para los módulos que cli.py lanza en
+paralelo entre sí (ver timeouts.run_threadsafe) — el resto sigue
+pasando por run_module sin tocar nada aquí.
 """
 
 import subprocess
 
 
-def run(args, **kwargs) -> subprocess.CompletedProcess:
+def run(args, timeout=None, **kwargs) -> subprocess.CompletedProcess:
     """Misma idea que subprocess.run(args, capture_output=True, ...),
     pero si communicate() es interrumpido por cualquier excepción
-    (incluida ModuleTimeoutError, que hereda de BaseException, no de
-    Exception — ver dojohack.timeouts) mata el proceso y lo espera
-    antes de relanzar la excepción, en vez de dejarlo huérfano."""
+    (timeout incluido, o ModuleTimeoutError, que hereda de
+    BaseException, no de Exception — ver dojohack.timeouts) mata el
+    proceso y lo espera antes de relanzar la excepción, en vez de
+    dejarlo huérfano."""
     kwargs.pop("capture_output", None)  # siempre capturamos por nuestra cuenta
     proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **kwargs)
     try:
-        stdout, stderr = proc.communicate()
+        stdout, stderr = proc.communicate(timeout=timeout)
     except BaseException:
         proc.kill()
         proc.wait()
