@@ -32,6 +32,7 @@ este repo primero.
 import argparse
 import json
 import sys
+import urllib.parse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -68,6 +69,26 @@ from .timeouts import MODULE_TIMEOUTS, run_module, run_threadsafe
 
 def log(msg: str) -> None:
     print(f"[dojohack] {msg}", flush=True)
+
+
+def _same_host(url: str, host: str) -> bool:
+    """True si url es del mismo host que el target (comparación
+    exacta, sin subdominios/www). Filtro de alcance: katana (-jc
+    sigue JS, -kf all sigue robots/sitemap) encuentra enlaces de
+    verdad a terceros -- CDNs, "powered by WordPress", licencias de
+    librerías JS en GitHub... -- que SOLO deberían quedar como texto
+    de referencia, nunca como objetivo de un payload. Confirmado de
+    primera mano contra aceituno.thl: sin este filtro, dalfox llegó a
+    estimar miles de peticiones de XSS contra es.wordpress.org y
+    github.com, fuera de cualquier autorización de este proyecto (ver
+    conversación con Paco, 2026-10-26). Se aplica una sola vez, justo
+    donde se calculan katana_urls/katana_forms, para que dalfox, arjun,
+    route_patterns y las sondas propias (que todas parten de esa misma
+    lista) queden cubiertas sin tener que repetir el filtro en cada una."""
+    try:
+        return urllib.parse.urlparse(url).hostname == host
+    except ValueError:
+        return False
 
 
 def _skip_reason(name: str, missing_tools: set, active_modules: set) -> str | None:
@@ -233,10 +254,19 @@ def _scan_web_target(wt, missing_tools: set, multiple: bool, active_modules: set
     raw = stage1.get("katana")
     if raw:
         result = katana_scan.parse_findings(raw)
-        katana_urls = katana_scan.parse_endpoints(raw)
-        katana_forms = katana_scan.parse_forms(raw)
+        katana_urls_crudos = katana_scan.parse_endpoints(raw)
+        katana_forms_crudos = katana_scan.parse_forms(raw)
+        katana_urls = [u for u in katana_urls_crudos if _same_host(u, wt.host)]
+        katana_forms = [f for f in katana_forms_crudos if _same_host(f.get("action", ""), wt.host)]
+        descartadas = len(katana_urls_crudos) - len(katana_urls)
         findings.extend(result)
         wlog(f"katana: hecho — {len(result)} endpoints encontrados")
+        if descartadas:
+            wlog(
+                f"katana: {descartadas} endpoint(s) fuera de alcance descartados "
+                f"(host distinto de {wt.host} — p.ej. enlaces a CDN/terceros en el "
+                f"HTML/JS) antes de pasarlos a dalfox/arjun/las sondas propias"
+            )
     elif "katana" in stage1:
         wlog("katana: sin resultado (fallo, timeout o nada que reportar)")
 
