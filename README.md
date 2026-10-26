@@ -70,6 +70,8 @@ desde la raíz del repo.
 ```
 dojohack <target> [--base-path /subdir] [--name nombre-maquina] [--polish]
 dojohack <target> --quick
+dojohack <target> --skip dalfox,wpscan   # pasada rápida, sin los módulos caros
+dojohack <target> --only dalfox          # completa después solo ese módulo
 ```
 
 `--quick` hace un diagnóstico rápido (segundos, sin nmap ni fuzzing
@@ -78,6 +80,14 @@ el CMS en un subdirectorio, e imprime el comando `dojohack` completo
 recomendado — pensado para no relanzar el pipeline completo 2-3 veces
 cuando el target usa vhosting (ver `quick_scan.py`). No toca
 `/etc/hosts` ni lanza el resto del pipeline.
+
+`--skip mod1,mod2` / `--only mod1,mod2` controlan qué módulos corren
+(lista en `dojohack --help`) — pensado para una pasada rápida primero
+(`--skip dalfox,wpscan`, los dos módulos que más tardan en un target
+con contenido real) y completar después con los caros por separado
+(`--only dalfox`). Si ya hay un `findings.json` de un lanzamiento
+anterior en la misma carpeta de salida, el nuevo lanzamiento SUMA sus
+hallazgos a los que ya había en vez de sobrescribirlos.
 
 `--name` fija el nombre de la carpeta de salida (`output/<name>/` en
 vez de `output/<target>/`) — para que coincida con el nombre que uses

@@ -5,6 +5,11 @@ Uso:
     dojohack <target> [--base-path /subdir] [--name nombre] [--polish]
     dojohack <target> --quick   (diagnóstico rápido de vhost/CMS antes
                                   del pipeline completo — ver quick_scan.py)
+    dojohack <target> --skip dalfox,wpscan   (pasada rápida, sin los
+                                  módulos caros)
+    dojohack <target> --only dalfox          (relanza solo ese módulo
+                                  más tarde; se SUMA al findings.json
+                                  que ya hubiera en vez de sobrescribir)
     (o, sin instalar vía pip: python -m dojohack.cli <target> ...)
 
 El pipeline corre nmap/nuclei una vez contra el host, y el resto de
@@ -32,6 +37,16 @@ from pathlib import Path
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+# Módulos que --skip/--only pueden controlar -- deliberadamente no
+# incluye el fontanería siempre-encendida (vhost_check, route_patterns,
+# preprocessor, classifier, report): esos son baratos y alimentan a
+# los demás, no tiene sentido desactivarlos por separado.
+ALL_MODULES = {
+    "nmap", "nuclei", "enum4linux", "vhost_fuzz", "php_cve_check",
+    "testssl", "ffuf", "katana", "trufflehog", "wpscan", "dalfox",
+    "arjun", "ssti", "ssrf", "path_traversal", "sqli", "command_injection",
+}
+
 from . import ai_redact, classifier, php_cve_check, preflight, preprocessor, quick_scan, report, route_patterns, vhost_check, vhost_fuzz, web_targets
 from .modules import (
     arjun_scan,
@@ -55,7 +70,20 @@ def log(msg: str) -> None:
     print(f"[dojohack] {msg}", flush=True)
 
 
-def _scan_web_target(wt, missing_tools: set, multiple: bool) -> list[dict]:
+def _skip_reason(name: str, missing_tools: set, active_modules: set) -> str | None:
+    """Motivo por el que un módulo no se lanza, o None si debe
+    lanzarse — dos motivos posibles: el binario no está instalado
+    (missing_tools, de preflight) o se ha desactivado explícitamente
+    con --skip/--only (active_modules). Mismo hueco en el que antes
+    solo se comprobaba missing_tools."""
+    if name in missing_tools:
+        return "binario no encontrado"
+    if name not in active_modules:
+        return "desactivado por --skip/--only"
+    return None
+
+
+def _scan_web_target(wt, missing_tools: set, multiple: bool, active_modules: set) -> list[dict]:
     """Corre ffuf/katana/route_patterns/dalfox/trufflehog/vhost_check +
     las sondas propias contra un único web_target. Separado de main()
     porque esto se repite una vez por cada target web que haya
@@ -71,7 +99,12 @@ def _scan_web_target(wt, missing_tools: set, multiple: bool) -> list[dict]:
     aviso_vhost = vhost_check.check(wt)
     if aviso_vhost:
         wlog(f"⚠️ {aviso_vhost}")
-        if "ffuf" not in missing_tools:
+        _reason = _skip_reason("vhost_fuzz", missing_tools, active_modules) or (
+            "binario ffuf no encontrado" if "ffuf" in missing_tools else None
+        )
+        if _reason:
+            wlog(f"vhost_fuzz: omitido ({_reason})")
+        else:
             wlog("vhost_fuzz: probando nombres de host habituales para encontrar el vhost real...")
             candidatos = run_module(
                 vhost_fuzz.fuzz, wt,
@@ -106,24 +139,31 @@ def _scan_web_target(wt, missing_tools: set, multiple: bool) -> list[dict]:
     with ThreadPoolExecutor(max_workers=6) as pool:
         futures = {}
 
-        futures[pool.submit(
-            run_threadsafe, php_cve_check.check, wt,
-            timeout=MODULE_TIMEOUTS["php_cve_check"], label="php_cve_check", on_error=wlog,
-        )] = "php_cve_check"
+        _reason = _skip_reason("php_cve_check", missing_tools, active_modules)
+        if _reason:
+            wlog(f"php2shell: omitido ({_reason})")
+        else:
+            futures[pool.submit(
+                run_threadsafe, php_cve_check.check, wt,
+                timeout=MODULE_TIMEOUTS["php_cve_check"], label="php_cve_check", on_error=wlog,
+            )] = "php_cve_check"
 
         if wt.scheme != "https":
             wlog("testssl: omitido (no es https)")
-        elif "testssl" in missing_tools:
-            wlog("testssl: omitido (binario no encontrado)")
         else:
-            wlog("testssl: en marcha...")
-            futures[pool.submit(
-                run_threadsafe, testssl_scan.run, wt,
-                timeout=MODULE_TIMEOUTS["testssl"], label="testssl", on_error=wlog,
-            )] = "testssl"
+            _reason = _skip_reason("testssl", missing_tools, active_modules)
+            if _reason:
+                wlog(f"testssl: omitido ({_reason})")
+            else:
+                wlog("testssl: en marcha...")
+                futures[pool.submit(
+                    run_threadsafe, testssl_scan.run, wt,
+                    timeout=MODULE_TIMEOUTS["testssl"], label="testssl", on_error=wlog,
+                )] = "testssl"
 
-        if "ffuf" in missing_tools:
-            wlog("ffuf: omitido (binario no encontrado)")
+        _reason = _skip_reason("ffuf", missing_tools, active_modules)
+        if _reason:
+            wlog(f"ffuf: omitido ({_reason})")
         else:
             wlog("ffuf: en marcha...")
             futures[pool.submit(
@@ -131,8 +171,9 @@ def _scan_web_target(wt, missing_tools: set, multiple: bool) -> list[dict]:
                 timeout=MODULE_TIMEOUTS["ffuf"], label="ffuf", on_error=wlog,
             )] = "ffuf"
 
-        if "katana" in missing_tools:
-            wlog("katana: omitido (binario no encontrado)")
+        _reason = _skip_reason("katana", missing_tools, active_modules)
+        if _reason:
+            wlog(f"katana: omitido ({_reason})")
         else:
             wlog("katana: en marcha...")
             futures[pool.submit(
@@ -140,8 +181,9 @@ def _scan_web_target(wt, missing_tools: set, multiple: bool) -> list[dict]:
                 timeout=MODULE_TIMEOUTS["katana"], label="katana", on_error=wlog,
             )] = "katana"
 
-        if "trufflehog" in missing_tools:
-            wlog("trufflehog: omitido (binario no encontrado)")
+        _reason = _skip_reason("trufflehog", missing_tools, active_modules)
+        if _reason:
+            wlog(f"trufflehog: omitido ({_reason})")
         else:
             wlog("trufflehog: en marcha...")
             futures[pool.submit(
@@ -149,8 +191,9 @@ def _scan_web_target(wt, missing_tools: set, multiple: bool) -> list[dict]:
                 timeout=MODULE_TIMEOUTS["trufflehog"], label="trufflehog", on_error=wlog,
             )] = "trufflehog"
 
-        if "wpscan" in missing_tools:
-            wlog("wpscan: omitido (binario no encontrado)")
+        _reason = _skip_reason("wpscan", missing_tools, active_modules)
+        if _reason:
+            wlog(f"wpscan: omitido ({_reason})")
         else:
             wlog("wpscan: en marcha...")
             futures[pool.submit(
@@ -225,8 +268,9 @@ def _scan_web_target(wt, missing_tools: set, multiple: bool) -> list[dict]:
     with ThreadPoolExecutor(max_workers=2) as pool:
         futures = {}
 
-        if "dalfox" in missing_tools:
-            wlog("dalfox: omitido (binario no encontrado)")
+        _reason = _skip_reason("dalfox", missing_tools, active_modules)
+        if _reason:
+            wlog(f"dalfox: omitido ({_reason})")
         else:
             wlog("dalfox: en marcha...")
             futures[pool.submit(
@@ -234,8 +278,9 @@ def _scan_web_target(wt, missing_tools: set, multiple: bool) -> list[dict]:
                 timeout=MODULE_TIMEOUTS["dalfox"], label="dalfox", on_error=wlog,
             )] = "dalfox"
 
-        if "arjun" in missing_tools:
-            wlog("arjun: omitido (binario no encontrado)")
+        _reason = _skip_reason("arjun", missing_tools, active_modules)
+        if _reason:
+            wlog(f"arjun: omitido ({_reason})")
         elif not katana_urls:
             wlog("arjun: omitido (katana no encontró endpoints que probar)")
         else:
@@ -266,60 +311,80 @@ def _scan_web_target(wt, missing_tools: set, multiple: bool) -> list[dict]:
 
     injection_points = probe_common.from_urls(katana_urls) + probe_common.from_forms(katana_forms) + arjun_points
 
-    wlog(f"ssti: en marcha... ({len(injection_points)} puntos de inyección)")
-    result = run_module(
-        ssti.run, injection_points,
-        timeout=MODULE_TIMEOUTS["ssti"], label="ssti", on_error=wlog,
-    )
-    if result:
-        findings.extend(result)
-        wlog(f"ssti: hecho — {len(result)} hallazgos")
+    _reason = _skip_reason("ssti", missing_tools, active_modules)
+    if _reason:
+        wlog(f"ssti: omitido ({_reason})")
     else:
-        wlog("ssti: sin resultado (fallo, timeout, sin puntos de inyección, o nada que reportar)")
+        wlog(f"ssti: en marcha... ({len(injection_points)} puntos de inyección)")
+        result = run_module(
+            ssti.run, injection_points,
+            timeout=MODULE_TIMEOUTS["ssti"], label="ssti", on_error=wlog,
+        )
+        if result:
+            findings.extend(result)
+            wlog(f"ssti: hecho — {len(result)} hallazgos")
+        else:
+            wlog("ssti: sin resultado (fallo, timeout, sin puntos de inyección, o nada que reportar)")
 
-    wlog(f"ssrf: en marcha... ({len(injection_points)} puntos de inyección)")
-    result = run_module(
-        ssrf.run, injection_points, wt.host,
-        timeout=MODULE_TIMEOUTS["ssrf"], label="ssrf", on_error=wlog,
-    )
-    if result:
-        findings.extend(result)
-        wlog(f"ssrf: hecho — {len(result)} hallazgos")
+    _reason = _skip_reason("ssrf", missing_tools, active_modules)
+    if _reason:
+        wlog(f"ssrf: omitido ({_reason})")
     else:
-        wlog("ssrf: sin resultado (fallo, timeout, sin puntos de inyección, o nada que reportar)")
+        wlog(f"ssrf: en marcha... ({len(injection_points)} puntos de inyección)")
+        result = run_module(
+            ssrf.run, injection_points, wt.host,
+            timeout=MODULE_TIMEOUTS["ssrf"], label="ssrf", on_error=wlog,
+        )
+        if result:
+            findings.extend(result)
+            wlog(f"ssrf: hecho — {len(result)} hallazgos")
+        else:
+            wlog("ssrf: sin resultado (fallo, timeout, sin puntos de inyección, o nada que reportar)")
 
-    wlog(f"path_traversal: en marcha... ({len(injection_points)} puntos de inyección)")
-    result = run_module(
-        path_traversal.run, injection_points,
-        timeout=MODULE_TIMEOUTS["path_traversal"], label="path_traversal", on_error=wlog,
-    )
-    if result:
-        findings.extend(result)
-        wlog(f"path_traversal: hecho — {len(result)} hallazgos")
+    _reason = _skip_reason("path_traversal", missing_tools, active_modules)
+    if _reason:
+        wlog(f"path_traversal: omitido ({_reason})")
     else:
-        wlog("path_traversal: sin resultado (fallo, timeout, sin puntos de inyección, o nada que reportar)")
+        wlog(f"path_traversal: en marcha... ({len(injection_points)} puntos de inyección)")
+        result = run_module(
+            path_traversal.run, injection_points,
+            timeout=MODULE_TIMEOUTS["path_traversal"], label="path_traversal", on_error=wlog,
+        )
+        if result:
+            findings.extend(result)
+            wlog(f"path_traversal: hecho — {len(result)} hallazgos")
+        else:
+            wlog("path_traversal: sin resultado (fallo, timeout, sin puntos de inyección, o nada que reportar)")
 
-    wlog(f"sqli: en marcha... ({len(injection_points)} puntos de inyección)")
-    result = run_module(
-        sqli.run, injection_points,
-        timeout=MODULE_TIMEOUTS["sqli"], label="sqli", on_error=wlog,
-    )
-    if result:
-        findings.extend(result)
-        wlog(f"sqli: hecho — {len(result)} hallazgos")
+    _reason = _skip_reason("sqli", missing_tools, active_modules)
+    if _reason:
+        wlog(f"sqli: omitido ({_reason})")
     else:
-        wlog("sqli: sin resultado (fallo, timeout, sin puntos de inyección, o nada que reportar)")
+        wlog(f"sqli: en marcha... ({len(injection_points)} puntos de inyección)")
+        result = run_module(
+            sqli.run, injection_points,
+            timeout=MODULE_TIMEOUTS["sqli"], label="sqli", on_error=wlog,
+        )
+        if result:
+            findings.extend(result)
+            wlog(f"sqli: hecho — {len(result)} hallazgos")
+        else:
+            wlog("sqli: sin resultado (fallo, timeout, sin puntos de inyección, o nada que reportar)")
 
-    wlog(f"command_injection: en marcha... ({len(injection_points)} puntos de inyección)")
-    result = run_module(
-        command_injection.run, injection_points,
-        timeout=MODULE_TIMEOUTS["command_injection"], label="command_injection", on_error=wlog,
-    )
-    if result:
-        findings.extend(result)
-        wlog(f"command_injection: hecho — {len(result)} hallazgos")
+    _reason = _skip_reason("command_injection", missing_tools, active_modules)
+    if _reason:
+        wlog(f"command_injection: omitido ({_reason})")
     else:
-        wlog("command_injection: sin resultado (fallo, timeout, sin puntos de inyección, o nada que reportar)")
+        wlog(f"command_injection: en marcha... ({len(injection_points)} puntos de inyección)")
+        result = run_module(
+            command_injection.run, injection_points,
+            timeout=MODULE_TIMEOUTS["command_injection"], label="command_injection", on_error=wlog,
+        )
+        if result:
+            findings.extend(result)
+            wlog(f"command_injection: hecho — {len(result)} hallazgos")
+        else:
+            wlog("command_injection: sin resultado (fallo, timeout, sin puntos de inyección, o nada que reportar)")
 
     return findings
 
@@ -372,7 +437,40 @@ def main() -> int:
             "2-3 veces. No lanza el resto del pipeline ni toca /etc/hosts."
         ),
     )
+    modulos_grupo = parser.add_mutually_exclusive_group()
+    modulos_grupo.add_argument(
+        "--skip", default=None, metavar="MOD1,MOD2",
+        help=(
+            "No lanzar estos módulos (lista separada por comas, ej. "
+            "--skip dalfox,wpscan). Módulos válidos: " + ", ".join(sorted(ALL_MODULES)) + ". "
+            "Si ya hay un findings.json previo en la carpeta de salida, "
+            "los hallazgos de este lanzamiento se SUMAN a los que ya "
+            "había, en vez de sobrescribirlos — pensado para una pasada "
+            "rápida primero y completar con los módulos caros después."
+        ),
+    )
+    modulos_grupo.add_argument(
+        "--only", default=None, metavar="MOD1,MOD2",
+        help=(
+            "Lanzar ÚNICAMENTE estos módulos (lista separada por comas, "
+            "ej. --only dalfox). Mismos módulos válidos que --skip, y "
+            "mismo comportamiento de sumar en vez de sobrescribir si ya "
+            "hay un findings.json previo."
+        ),
+    )
     args = parser.parse_args()
+
+    if args.skip or args.only:
+        nombres = {n.strip() for n in (args.skip or args.only).split(",") if n.strip()}
+        desconocidos = nombres - ALL_MODULES
+        if desconocidos:
+            parser.error(
+                f"módulo(s) no reconocido(s): {', '.join(sorted(desconocidos))}. "
+                f"Válidos: {', '.join(sorted(ALL_MODULES))}"
+            )
+        active_modules = (ALL_MODULES - nombres) if args.skip else nombres
+    else:
+        active_modules = set(ALL_MODULES)
 
     if args.quick:
         quick_scan.run(args.target)
@@ -389,8 +487,9 @@ def main() -> int:
     missing_tools = preflight.check_and_install()
 
     port_findings: list = []
-    if "nmap" in missing_tools:
-        log("nmap: omitido (binario no encontrado)")
+    _reason = _skip_reason("nmap", missing_tools, active_modules)
+    if _reason:
+        log(f"nmap: omitido ({_reason})")
     else:
         log("nmap: en marcha...")
         result = run_module(
@@ -408,8 +507,9 @@ def main() -> int:
     for wt in resolved_targets:
         log(f"target web: {wt.base_url}")
 
-    if "nuclei" in missing_tools:
-        log("nuclei: omitido (binario no encontrado)")
+    _reason = _skip_reason("nuclei", missing_tools, active_modules)
+    if _reason:
+        log(f"nuclei: omitido ({_reason})")
     else:
         # nuclei recibe el host a pelo, no un web_target: hace su
         # propia detección de protocolos/puertos (http, https, ssh...)
@@ -436,6 +536,8 @@ def main() -> int:
         log("enum4linux-ng: omitido (nmap no vio SMB/LDAP abiertos)")
     elif "enum4linux-ng" in missing_tools:
         log("enum4linux-ng: omitido (binario no encontrado)")
+    elif "enum4linux" not in active_modules:
+        log("enum4linux-ng: omitido (desactivado por --skip/--only)")
     else:
         log("enum4linux-ng: en marcha...")
         result = run_module(
@@ -450,9 +552,22 @@ def main() -> int:
 
     multiple = len(resolved_targets) > 1
     for wt in resolved_targets:
-        findings.extend(_scan_web_target(wt, missing_tools, multiple))
+        findings.extend(_scan_web_target(wt, missing_tools, multiple, active_modules))
 
     out_path = out_dir / "findings.json"
+    if (args.skip or args.only) and out_path.is_file():
+        # --skip/--only es para completar una pasada anterior, no para
+        # sustituirla -- sin esto, "dojohack <target> --only dalfox"
+        # borraría todo lo que ya tenías de ffuf/wpscan/etc. de la
+        # pasada rápida de antes (ver conversación con Paco, 2026-10-26).
+        try:
+            previos = json.loads(out_path.read_text(encoding="utf-8")).get("findings", [])
+        except (OSError, json.JSONDecodeError):
+            previos = []
+        if previos:
+            log(f"combinando con {len(previos)} hallazgos ya existentes en {out_path}")
+            findings = previos + findings
+
     with open(out_path, "w", encoding="utf-8") as f:
         json.dump({"target": target, "findings": findings}, f, indent=2, ensure_ascii=False)
     log(f"guardado: {out_path}")
