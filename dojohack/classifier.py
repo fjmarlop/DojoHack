@@ -134,8 +134,16 @@ def _redact_enum4linux(grupo: dict) -> str:
 
 def _redact_wpscan(grupo: dict) -> str:
     texto = grupo["evidencia"][0]
+    tiene_cve = "vulnerabilidad(es) conocida(s)" in texto  # solo llega con WPSCAN_API_TOKEN, ver wpscan_scan.py
 
     if re.search(r"^WordPress \d", texto):
+        if tiene_cve:
+            return (
+                f"wpscan cruzó la versión de WordPress contra su base de datos "
+                f"y hay vulnerabilidades públicas conocidas para ella: {texto}. "
+                f"Esto ya no es solo 'sospecha por versión antigua' — hay CVEs "
+                f"concretos que mirar."
+            )
         if "insecure" in texto or "estado: insecure" in texto:
             return (
                 f"wpscan dice que el WordPress de esta instalación está "
@@ -146,6 +154,12 @@ def _redact_wpscan(grupo: dict) -> str:
         return f"wpscan confirmó la versión de WordPress instalada: {texto}. Dato de reconocimiento."
 
     if re.search(r"^plugin '", texto):
+        if tiene_cve:
+            return (
+                f"wpscan encontró un plugin con vulnerabilidades públicas "
+                f"conocidas: {texto}. Esta sí es una pista concreta, no solo "
+                f"'plugin desactualizado' — vale la pena mirar el CVE."
+            )
         extra = " — y encima desactualizado" if "desactualizado" in texto else ""
         return (
             f"wpscan encontró un plugin instalado{extra}: {texto}. Sin un "
@@ -155,6 +169,11 @@ def _redact_wpscan(grupo: dict) -> str:
         )
 
     if re.search(r"^tema activo:", texto):
+        if tiene_cve:
+            return (
+                f"wpscan identificó el tema activo de WordPress, y tiene "
+                f"vulnerabilidades públicas conocidas: {texto}."
+            )
         return f"wpscan identificó el tema activo de WordPress: {texto}. Dato de reconocimiento, por si hay algo público para ese tema/versión."
 
     m = re.match(r"^usuario encontrado:\s*(.+)$", texto)

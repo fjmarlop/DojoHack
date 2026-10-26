@@ -21,24 +21,49 @@ ataque real y dato de reconocimiento (ver el campo "outdated").
 engagement real; aquí no hay WAF ni SOC que evitar, así que no tiene
 sentido ir tan despacio, ver conversación con Paco, 2026-10-20).
 
-LIMITACIÓN CONOCIDA: sin --api-token (no hay uno de wpscan.com
-configurado en este equipo), wpscan no puede cruzar plugins/temas/
-core contra su base de datos de CVEs — "vulnerabilities" viene vacío
-en todos los hallazgos, confirmado contra un lab real. El campo
-version.status ("insecure"/"latest") sí llega sin token (es una
-comprobación aparte, más simple). Si algún día hay un token (gratis,
-25 peticiones/día en wpscan.com/register), añadirlo aquí con
---api-token activaría esos datos sin más cambios en el parseo.
+Token de wpscan.com (gratis, 25 peticiones/día en wpscan.com/register)
+opcional vía la variable de entorno WPSCAN_API_TOKEN — nunca como
+argumento de dojohack ni guardado en ningún fichero de este proyecto,
+mismo criterio que ANTHROPIC_API_KEY en ai_redact.py: se lee de
+os.environ en el momento de lanzar wpscan, nunca se escribe en
+ningún log/finding/fichero de salida. Se pone en la misma línea del
+comando (no export, no ~/.zshrc, para que no quede puesta de forma
+permanente — ver conversación con Paco, 2026-10-26):
+
+    WPSCAN_API_TOKEN=xxxx dojohack <target> ...
+
+Sin el token, "vulnerabilities" viene vacío en todos los hallazgos
+(confirmado contra un lab real) y _vuln_summary() nunca añade nada —
+el campo version.status ("insecure"/"latest") sí llega igual, es una
+comprobación aparte más simple que no necesita token.
 
 Usa -f json (un único objeto con todo el scan) en vez de la salida de
 consola — mismo motivo que el resto: formato estable entre versiones.
 """
 
 import json
+import os
 
 from .. import subprocess_utils
 
 ENUMERATE = "ap,at,tt,cb,dbe,bf,u,m"
+
+
+def _vuln_summary(vulnerabilities: list[dict] | None) -> str:
+    """Resumen corto de las vulnerabilidades conocidas que wpscan.com
+    cruza contra una versión (solo llega con WPSCAN_API_TOKEN) —
+    título + CVE si lo trae, hasta 3, con un "+N más" si hay más."""
+    if not vulnerabilities:
+        return ""
+    etiquetas = []
+    for v in vulnerabilities[:3]:
+        cves = (v.get("references") or {}).get("cve") or []
+        etiquetas.append(f"{v.get('title', '?')}" + (f" (CVE-{cves[0]})" if cves else ""))
+    resto = len(vulnerabilities) - len(etiquetas)
+    texto = "; ".join(etiquetas)
+    if resto > 0:
+        texto += f"; +{resto} más"
+    return f" — {len(vulnerabilities)} vulnerabilidad(es) conocida(s): {texto}"
 
 
 def run(web_target, timeout: int | None = None) -> list[dict]:
@@ -47,14 +72,15 @@ def run(web_target, timeout: int | None = None) -> list[dict]:
     propaga a subprocess_utils.run() — cli.py lo lanza en paralelo con
     otros módulos independientes vía timeouts.run_threadsafe (ver ese
     módulo para el porqué)."""
-    proc = subprocess_utils.run(
-        [
-            "wpscan", "--url", f"{web_target.base_url}/",
-            "-e", ENUMERATE, "-f", "json", "--no-banner", "-t", "50",
-        ],
-        text=True,
-        timeout=timeout,
-    )
+    args = [
+        "wpscan", "--url", f"{web_target.base_url}/",
+        "-e", ENUMERATE, "-f", "json", "--no-banner", "-t", "50",
+    ]
+    token = os.environ.get("WPSCAN_API_TOKEN")
+    if token:
+        args += ["--api-token", token]
+
+    proc = subprocess_utils.run(args, text=True, timeout=timeout)
     # wpscan devuelve códigos de salida distintos según lo que
     # encuentre (p.ej. vulnerabilidades) — no es señal de fallo real
     # por sí solo; solo se trata como error si tampoco hay stdout que
@@ -71,23 +97,29 @@ def run(web_target, timeout: int | None = None) -> list[dict]:
     if not version.get("number"):
         return []  # no se detectó un core de WordPress válido: no es WP (o no se pudo confirmar)
 
+    core_vulns = version.get("vulnerabilities")
     findings = [{
         "name": "WPSCAN",
-        "detail": f"WordPress {version['number']} (estado: {version.get('status', 'desconocido')})",
-        "severity": "medium" if version.get("status") == "insecure" else "info",
+        "detail": (
+            f"WordPress {version['number']} (estado: {version.get('status', 'desconocido')})"
+            f"{_vuln_summary(core_vulns)}"
+        ),
+        "severity": "high" if core_vulns else ("medium" if version.get("status") == "insecure" else "info"),
     }]
 
     main_theme = data.get("main_theme")
     if main_theme:
         theme_version = (main_theme.get("version") or {}).get("number", "")
+        theme_vulns = main_theme.get("vulnerabilities")
         findings.append({
             "name": "WPSCAN",
-            "detail": f"tema activo: {main_theme.get('slug', '?')} {theme_version}".strip(),
-            "severity": "info",
+            "detail": f"tema activo: {main_theme.get('slug', '?')} {theme_version}".strip() + _vuln_summary(theme_vulns),
+            "severity": "high" if theme_vulns else "info",
         })
 
     for slug, plugin in (data.get("plugins") or {}).items():
         version_num = (plugin.get("version") or {}).get("number")
+        plugin_vulns = plugin.get("vulnerabilities")
         detalle = f"plugin '{slug}'"
         if version_num:
             detalle += f" {version_num}"
@@ -95,7 +127,11 @@ def run(web_target, timeout: int | None = None) -> list[dict]:
             detalle += f" (desactualizado, última: {plugin.get('latest_version', '?')})"
         if plugin.get("directory_listing"):
             detalle += " — listado de directorio activado en su carpeta"
-        findings.append({"name": "WPSCAN", "detail": detalle, "severity": "info"})
+        detalle += _vuln_summary(plugin_vulns)
+        findings.append({
+            "name": "WPSCAN", "detail": detalle,
+            "severity": "high" if plugin_vulns else "info",
+        })
 
     for username, user in (data.get("users") or {}).items():
         findings.append({

@@ -125,6 +125,16 @@ Guarda en `<raíz del proyecto>/output/<target o name>/`:
   DojoHack nunca escribe directamente en esas notas, solo deja el
   contenido listo para que Paco decida qué pegar
 
+`wpscan` puede cruzar plugins/temas/core contra la base de CVEs de
+wpscan.com con un token gratis (wpscan.com/register, 25 peticiones/
+día) — nunca como argumento de `dojohack` ni guardado en ningún
+fichero de este proyecto, se pasa por variable de entorno en la misma
+línea del comando (no `export`, no `.zshrc`):
+
+```
+WPSCAN_API_TOKEN=xxxx dojohack <target> ...
+```
+
 ## Requisitos
 
 - Python 3.10+ y las dependencias de `requirements.txt` (`httpx`,
