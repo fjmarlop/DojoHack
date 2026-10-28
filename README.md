@@ -3,53 +3,65 @@
 Herramienta de reconocimiento para practicar CTF (HTB/THM/DockerLabs):
 lanzas el pipeline contra un target, te devuelve pistas sobre posibles
 vulnerabilidades y técnicas a probar — sin decirte explícitamente cómo
-explotrarlas — y a partir de ahí resuelves tú.
+explotarlas — y a partir de ahí resuelves tú.
 
-Proyecto hermano de [PocketHacker](../PocketHacker), pero independiente:
-clean-room completo, sin depender de wstg-scan ni de ningún repo de
+Clean-room completo: sin depender de wstg-scan ni de ningún repo de
 terceros para la lógica de detección. Las herramientas externas (nmap,
-nuclei, ffuf, katana, dalfox, trufflehog, wpscan) se invocan directo;
-las sondas propias (SSTI/SSRF/XSS/path traversal...) se reescriben
-desde la metodología OWASP WSTG.
+nuclei, ffuf, katana, dalfox, arjun, enum4linux-ng, testssl, trufflehog,
+wpscan) se invocan directo; las sondas propias (SSTI/SSRF/SQLi/command
+injection/path traversal — XSS la cubre dalfox) se reescriben desde la
+metodología OWASP WSTG.
 
 ## Estado actual
 
 Hoja de ruta inicial completa, pipeline de punta a punta validado
-contra un lab real:
+contra labs reales:
 
 - [x] Esqueleto del proyecto + CLI
-- [x] Wrapper de timeout por módulo (`run_module`/`MODULE_TIMEOUTS`)
+- [x] Wrapper de timeout por módulo (`run_module`/`MODULE_TIMEOUTS`),
+      más una variante segura entre hilos (`run_threadsafe`) para los
+      módulos que corren en paralelo
 - [x] Preflight: comprueba e instala el arsenal vía apt si falta algo
 - [x] Módulos de herramientas externas: nmap, nuclei, ffuf, katana,
-      dalfox (acoplado a katana), trufflehog, wpscan (enumeración
-      completa: plugins/temas/usuarios/backups — sin API token de
-      wpscan.com todavía, así que sin cruce contra su base de CVEs)
+      dalfox (acoplado a katana, solo URLs del propio host), arjun
+      (descubrimiento de parámetros), enum4linux-ng, testssl,
+      trufflehog, wpscan (enumeración completa: plugins/temas/
+      usuarios/backups, con cruce opcional contra la base de CVEs de
+      wpscan.com vía `WPSCAN_API_TOKEN`)
+- [x] Pipeline parcialmente paralelizado (`cli.py`, dos tandas con
+      `ThreadPoolExecutor`): los módulos independientes corren a la
+      vez en vez de uno tras otro
+- [x] `--skip`/`--only` para elegir qué módulos corren, sumando
+      hallazgos a los de un lanzamiento previo en vez de sobrescribir
 - [x] Resolución de target web (`web_targets.py`): puerto/esquema a
       partir de lo que encuentra nmap + `--base-path` si la app no
       está en la raíz — validado contra dos labs reales (vhosting por
       nombre y WordPress en un subdirectorio)
 - [x] Aviso de vhost equivocado (`vhost_check.py`) si target es una IP
-      y huele a vhost por defecto
+      y huele a vhost por defecto, incluida la señal de WordPress
+      anunciando su propio hostname real vía `wp-json`
+- [x] Modo `--quick` (`quick_scan.py`) — diagnóstico de vhost/CMS en
+      segundos, antes de lanzar el pipeline completo
 - [x] Sondas propias (OWASP WSTG, clean-room): SSTI, SSRF (con
-      listener OOB propio para SSRF ciego), Path Traversal — XSS no
-      tiene sonda propia porque dalfox ya la cubre
+      listener OOB propio para SSRF ciego), SQLi, Command Injection,
+      Path Traversal — XSS no tiene sonda propia porque dalfox ya la
+      cubre
 - [x] Tabla de pistas por patrón de ruta/nombre (`route_patterns.py`)
-- [x] Preprocessor (agrupación + confianza) — portado de PocketHacker
+- [x] Preprocessor (agrupación + confianza) — portado de un proyecto
+      hermano de pentesting (repo privado aparte)
 - [x] Clasificador de pistas — redacción dubitativa uniforme
-- [x] Informe final en terminal + guardado en `.md`
+- [x] Informe final en terminal + guardado en `.md`, con opción de
+      pulido de redacción vía `claude -p` (`--polish`)
 - [x] Detector de CVE-2026-109618/109619 ("PHP2Shell", RCE crítico en
       PHP 7.3–8.5.11, disclosure 2026-10-21) — `php_cve_check.py`,
       clean-room contra el advisory oficial de PHP Group, solo
       fingerprint de versión (sin disparar el bug de memoria de
       verdad, eso ya sería explotación)
-- [x] Modo `--quick` (`quick_scan.py`) — diagnóstico de vhost/CMS en
-      segundos, antes de lanzar el pipeline completo
 
 Próximos pasos (sin hoja de ruta fija todavía): ampliar la tabla de
 patrones de ruta y los redactores de pistas según lo que vaya
-apareciendo en más labs, considerar un token de wpscan.com si hace
-falta cruzar contra CVEs conocidos, y lo que surja al usarlo de verdad
-en más CTFs.
+apareciendo en más labs, y lo que surja al usarlo de verdad en más
+CTFs.
 
 ## Instalación
 
@@ -140,9 +152,13 @@ WPSCAN_API_TOKEN=xxxx dojohack <target> ...
 - Python 3.10+ y las dependencias de `requirements.txt` (`httpx`,
   usado por las sondas propias)
 - Kali Linux, con `nmap`, `nuclei`, `ffuf` + `seclists`, `katana`,
-  `dalfox`, `trufflehog` y `wpscan` en el PATH — si falta alguno, el
-  preflight del pipeline intenta instalarlo solo vía apt (necesita
-  sudo interactivo, por eso hace falta una terminal real, no vale
-  lanzarlo sin TTY)
+  `dalfox`, `arjun`, `enum4linux-ng`, `testssl.sh`, `trufflehog` y
+  `wpscan` en el PATH — si falta alguno, el preflight del pipeline
+  intenta instalarlo solo vía apt (necesita sudo interactivo, por eso
+  hace falta una terminal real, no vale lanzarlo sin TTY)
 - Pensado para correr en la VM Kali del lab de CTF, no en Windows —
   ver nota de timeouts en `dojohack/timeouts.py`
+
+## Licencia
+
+MIT — ver [LICENSE](LICENSE).
