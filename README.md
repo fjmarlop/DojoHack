@@ -159,6 +159,19 @@ WPSCAN_API_TOKEN=xxxx dojohack <target> ...
 - Pensado para correr en la VM Kali del lab de CTF, no en Windows —
   ver nota de timeouts en `dojohack/timeouts.py`
 
+## Tests
+
+Cubren la lógica pura (sin red ni subprocess real): el filtro de
+alcance de host, `--skip`/`--only`, los patrones de ruta, los
+timeouts (`run_module`/`run_threadsafe`), el preprocesador y el modo
+`--quick`. No sustituyen una pasada contra un lab real, pero sí evitan
+que una regresión en esa lógica pase desapercibida.
+
+```
+pip install -e ".[dev]" --break-system-packages
+python -m pytest
+```
+
 ## Licencia
 
 MIT — ver [LICENSE](LICENSE).
