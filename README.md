@@ -5,8 +5,8 @@ lanzas el pipeline contra un target, te devuelve pistas sobre posibles
 vulnerabilidades y técnicas a probar — sin decirte explícitamente cómo
 explotarlas — y a partir de ahí resuelves tú.
 
-Clean-room completo: sin depender de wstg-scan ni de ningún repo de
-terceros para la lógica de detección. Las herramientas externas (nmap,
+Clean-room completo: sin depender ni de ningún repo de terceros para
+la lógica de detección. Las herramientas externas (nmap,
 nuclei, ffuf, katana, dalfox, arjun, enum4linux-ng, testssl, trufflehog,
 wpscan) se invocan directo; las sondas propias (SSTI/SSRF/SQLi/command
 injection/path traversal — XSS la cubre dalfox) se reescriben desde la
